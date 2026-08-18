@@ -33,6 +33,8 @@ una pregunta distinta; sigue los enlaces en lugar de repetir sus reglas.
   inicial de paquetes.
 - [`0002-http-api-conventions.md`](adr/0002-http-api-conventions.md): convenciones
   de la API HTTP.
+- [`0003-fiber-http-server.md`](adr/0003-fiber-http-server.md): Fiber v3 como
+  servidor HTTP y ownership de su ciclo de vida.
 
 Una ADR aceptada no se reescribe para cambiar la decision. Crea otra ADR que la
 reemplace y enlaza ambas.

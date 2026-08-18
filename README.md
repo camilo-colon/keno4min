@@ -17,6 +17,20 @@ trabajen con el mismo contexto y los mismos criterios de salida:
 Ese comando valida la estructura del repositorio, las reglas arquitectonicas
 basicas y, cuando haya paquetes Go, ejecuta formato, `go vet` y tests.
 
+El servidor HTTP se ejecuta con `go run ./cmd/api`. Todavia no publica rutas de
+producto. Su configuracion usa las siguientes variables de entorno:
+
+| Variable | Valor por defecto |
+| --- | --- |
+| `KENO4MIN_HTTP_ADDRESS` | `:8080` |
+| `KENO4MIN_HTTP_BODY_LIMIT_BYTES` | `4194304` (4 MiB) |
+| `KENO4MIN_HTTP_READ_TIMEOUT` | `5s` |
+| `KENO4MIN_HTTP_WRITE_TIMEOUT` | `10s` |
+| `KENO4MIN_HTTP_IDLE_TIMEOUT` | `60s` |
+| `KENO4MIN_HTTP_SHUTDOWN_TIMEOUT` | `10s` |
+
+Los tiempos usan el formato de duracion de Go, por ejemplo `500ms` o `2m`.
+
 Antes de implementar una tarea:
 
 1. Lee [AGENTS.md](AGENTS.md), que funciona como mapa del repositorio.
