@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,6 +30,7 @@ func TestHealthEndpoints(t *testing.T) {
 			if response.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
 			}
+			requireContentType(t, response, fiber.MIMEApplicationJSON)
 
 			var payload map[string]string
 			if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
@@ -39,6 +41,42 @@ func TestHealthEndpoints(t *testing.T) {
 			}
 			if response.Header.Get(fiber.HeaderXRequestID) == "" {
 				t.Fatal("response does not include a request ID")
+			}
+		})
+	}
+}
+
+func TestMetadataEndpoints(t *testing.T) {
+	app := newTestServer(nil).App()
+
+	tests := []struct {
+		path     string
+		field    string
+		expected string
+	}{
+		{path: "/", field: "name", expected: "keno4min-test"},
+		{path: "/api/v1", field: "version", expected: "v1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			response, err := app.Test(httptest.NewRequest(http.MethodGet, tt.path, nil))
+			if err != nil {
+				t.Fatalf("request %s: %v", tt.path, err)
+			}
+			defer response.Body.Close()
+
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+			}
+			requireContentType(t, response, fiber.MIMEApplicationJSON)
+
+			var payload map[string]string
+			if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if payload[tt.field] != tt.expected {
+				t.Fatalf("payload = %#v", payload)
 			}
 		})
 	}
@@ -61,12 +99,17 @@ func TestErrorResponseKeepsRequestID(t *testing.T) {
 	if response.Header.Get(fiber.HeaderXRequestID) != "known-request-id" {
 		t.Fatalf("request ID header = %q", response.Header.Get(fiber.HeaderXRequestID))
 	}
+	requireContentType(t, response, "application/problem+json")
 
-	var payload errorEnvelope
+	var payload problemDetails
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload.Error.Status != http.StatusNotFound || payload.Error.RequestID != "known-request-id" {
+	if payload.Type != "about:blank" ||
+		payload.Title != http.StatusText(http.StatusNotFound) ||
+		payload.Status != http.StatusNotFound ||
+		payload.Detail == "" ||
+		payload.RequestID != "known-request-id" {
 		t.Fatalf("payload = %+v", payload)
 	}
 }
@@ -77,7 +120,9 @@ func TestRecoverDoesNotExposePanic(t *testing.T) {
 		panic("sensitive panic detail")
 	})
 
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/panic", nil))
+	request := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	request.Header.Set(fiber.HeaderXRequestID, "panic-request-id")
+	response, err := app.Test(request)
 	if err != nil {
 		t.Fatalf("request panic route: %v", err)
 	}
@@ -90,8 +135,37 @@ func TestRecoverDoesNotExposePanic(t *testing.T) {
 	if response.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusInternalServerError)
 	}
+	requireContentType(t, response, "application/problem+json")
+	if response.Header.Get(fiber.HeaderXRequestID) != "panic-request-id" {
+		t.Fatalf("request ID header = %q", response.Header.Get(fiber.HeaderXRequestID))
+	}
 	if strings.Contains(string(body), "sensitive panic detail") {
 		t.Fatalf("panic detail leaked in response: %s", body)
+	}
+
+	var payload problemDetails
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Type != "about:blank" ||
+		payload.Title != http.StatusText(http.StatusInternalServerError) ||
+		payload.Status != http.StatusInternalServerError ||
+		payload.Detail != http.StatusText(http.StatusInternalServerError) ||
+		payload.RequestID != "panic-request-id" {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func requireContentType(t *testing.T, response *http.Response, expected string) {
+	t.Helper()
+
+	contentType := response.Header.Get(fiber.HeaderContentType)
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse content type %q: %v", contentType, err)
+	}
+	if mediaType != expected {
+		t.Fatalf("content type = %q, want %q", mediaType, expected)
 	}
 }
 
