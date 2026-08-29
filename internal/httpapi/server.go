@@ -176,30 +176,31 @@ func healthResponse(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 
-type errorEnvelope struct {
-	Error errorResponse `json:"error"`
-}
-
-type errorResponse struct {
+type problemDetails struct {
+	Type      string `json:"type"`
+	Title     string `json:"title"`
 	Status    int    `json:"status"`
-	Message   string `json:"message"`
+	Detail    string `json:"detail"`
 	RequestID string `json:"request_id,omitempty"`
 }
 
 func errorHandler(c fiber.Ctx, err error) error {
 	status := errorStatus(err)
-	message := http.StatusText(status)
+	title := http.StatusText(status)
+	detail := title
 
 	var fiberErr *fiber.Error
-	if errors.As(err, &fiberErr) && fiberErr.Message != "" {
-		message = fiberErr.Message
+	if status < http.StatusInternalServerError && errors.As(err, &fiberErr) && fiberErr.Message != "" {
+		detail = fiberErr.Message
 	}
 
-	return c.Status(status).JSON(errorEnvelope{Error: errorResponse{
+	return c.Status(status).JSON(problemDetails{
+		Type:      "about:blank",
+		Title:     title,
 		Status:    status,
-		Message:   message,
+		Detail:    detail,
 		RequestID: requestid.FromContext(c),
-	}})
+	}, "application/problem+json")
 }
 
 func accessLog(logger *slog.Logger) fiber.Handler {

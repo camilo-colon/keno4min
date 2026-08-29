@@ -1,0 +1,139 @@
+openapi: 3.1.0
+info:
+  title: keno4min API
+  version: v1
+  description: Public HTTP API for keno4min.
+paths:
+  /:
+    get:
+      summary: Get service information
+      operationId: getServiceInfo
+      responses:
+        "200":
+          description: Service information.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        default:
+          $ref: "#/components/responses/Problem"
+  /health/live:
+    get:
+      summary: Check whether the service is alive
+      operationId: getLiveness
+      responses:
+        "200":
+          description: The service is alive.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        default:
+          $ref: "#/components/responses/Problem"
+  /health/ready:
+    get:
+      summary: Check whether the service is ready
+      operationId: getReadiness
+      responses:
+        "200":
+          description: The service is ready.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        default:
+          $ref: "#/components/responses/Problem"
+  /api/v1:
+    get:
+      summary: Get API version information
+      operationId: getAPIVersion
+      responses:
+        "200":
+          description: API version information.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIVersion"
+        default:
+          $ref: "#/components/responses/Problem"
+components:
+  headers:
+    RequestID:
+      description: Identifier used to correlate the response with server logs.
+      schema:
+        type: string
+  responses:
+    Problem:
+      description: The request could not be completed.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+  schemas:
+    ServiceInfo:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+      additionalProperties: false
+    Health:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: ok
+      additionalProperties: false
+    APIVersion:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          type: string
+          const: v1
+      additionalProperties: false
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - request_id
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        request_id:
+          type: string
+      additionalProperties: true
