@@ -1,62 +1,32 @@
+// Command api runs the Keno4min HTTP API.
 package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"log"
-	"net"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"cronos.bet/keno4min/internal/config"
-	"cronos.bet/keno4min/internal/server/httpapi"
+	"github.com/cronos/keno4min/internal/config"
+	"github.com/cronos/keno4min/internal/httpapi"
 )
 
 func main() {
-	if err := execute(); err != nil {
-		log.Printf("run API server: %v", err)
-		os.Exit(1)
-	}
-}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-func execute() error {
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("load configuration: %w", err)
+		logger.Error("invalid configuration", "error", err)
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	return run(ctx, cfg)
-}
-
-func run(ctx context.Context, cfg config.Config) error {
-	if err := ctx.Err(); err != nil {
-		return nil
+	server := httpapi.New(cfg, logger)
+	if err := server.Run(ctx); err != nil {
+		logger.Error("HTTP server failed", "error", err)
+		os.Exit(1)
 	}
-
-	listener, err := net.Listen("tcp", cfg.HTTPAddress)
-	if err != nil {
-		return fmt.Errorf("listen on configured HTTP address: %w", err)
-	}
-	defer func() {
-		if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
-			log.Printf("close HTTP listener: %v", closeErr)
-		}
-	}()
-
-	server := httpapi.New(httpapi.Config{
-		BodyLimit:       cfg.HTTPBodyLimit,
-		ReadTimeout:     cfg.HTTPReadTimeout,
-		WriteTimeout:    cfg.HTTPWriteTimeout,
-		IdleTimeout:     cfg.HTTPIdleTimeout,
-		ShutdownTimeout: cfg.HTTPShutdownTimeout,
-	})
-	if err := server.Serve(ctx, listener); err != nil {
-		return fmt.Errorf("serve HTTP: %w", err)
-	}
-	return nil
 }
