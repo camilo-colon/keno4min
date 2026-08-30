@@ -1,6 +1,6 @@
 module github.com/cronos/keno4min
 
-go 1.26.4
+go 1.27
 
 require github.com/gofiber/fiber/v3 v3.5.0
 

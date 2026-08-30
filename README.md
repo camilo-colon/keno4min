@@ -8,6 +8,7 @@ Backend en Go para un juego de Keno independiente orientado inicialmente a punto
 ## Documentación
 
 - [Product Requirements Document](docs/product-requirements.md): alcance del MVP, reglas, tabla de pagos, RTP, jackpot y criterios de aceptación.
+- [Arquitectura](docs/architecture.md): organización del código y reglas de dependencias.
 - [OpenAPI v1](api/openapi/v1/openapi.yaml): contrato actual de la API HTTP.
 - [Architecture Decision Records](docs/adrs/README.md): decisiones técnicas del proyecto.
 
