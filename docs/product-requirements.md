@@ -3,8 +3,8 @@
 | Campo | Valor |
 | --- | --- |
 | Estado | Borrador |
-| Versión | 0.1 |
-| Última actualización | 2026-08-29 |
+| Versión | 0.2 |
+| Última actualización | 2026-08-30 |
 | Audiencia | Producto, ingeniería y QA |
 
 ## 1. Resumen
@@ -105,8 +105,38 @@ Las integraciones financieras deben ser idempotentes: reintentar una solicitud n
    `closesAt` es el instante en que el contador visible llega a cero y se cierra
    el proceso de venta; no se deriva restando tres segundos a otro tiempo.
 6. Durante el cierre no se pueden crear, repetir ni anular tiquetes para ese sorteo.
-7. Un disparador programado de Amazon EventBridge inicia el procesamiento cada tres minutos.
+7. Amazon EventBridge Scheduler inicia una ejecución de AWS Step Functions cada tres minutos.
 8. La ejecución debe ser idempotente: el mismo sorteo no puede generar dos resultados ni liquidarse dos veces, aunque el evento sea entregado o reintentado más de una vez.
+
+### 6.1 Orquestación del ciclo
+
+Por el momento, una máquina de estados de AWS Step Functions coordina cada
+sorteo mediante el siguiente flujo secuencial:
+
+```text
+Amazon EventBridge Scheduler (cada 180 s)
+  └─> create_draw
+        └─> wait_draw (hasta closesAt)
+              └─> draw (establecer balls)
+                    └─> update_tickets
+```
+
+1. `create_draw` crea el sorteo correspondiente al intervalo programado y
+   registra `startsAt` y `closesAt`. Para el flujo actual, `closesAt` se fija en
+   `startsAt + 157 segundos`.
+2. `wait_draw` suspende la ejecución hasta el timestamp absoluto almacenado en
+   `closesAt`. Al alcanzarlo, la venta, repetición y anulación de tiquetes para
+   ese sorteo ya están cerradas.
+3. `draw` genera y persiste de forma definitiva los 20 valores de `balls` del
+   sorteo, respetando las reglas de aleatoriedad de este documento.
+4. `update_tickets` procesa los tiquetes válidos asociados al sorteo usando el
+   resultado persistido y actualiza su liquidación.
+
+Los 23 segundos entre `closesAt` y el siguiente intervalo programado constituyen
+un margen operativo; no forman parte de la ventana de venta. Las entregas
+duplicadas, los reintentos y la reanudación de una ejecución no pueden crear otro
+sorteo para el mismo intervalo, reemplazar sus `balls` ni volver a liquidar sus
+tiquetes.
 
 ## 7. Tiquetes y apuestas
 
@@ -371,6 +401,10 @@ Debe conservarse un historial inmutable o equivalente de:
 11. Un tiquete puede ganar el jackpot aunque no tenga un premio normal.
 12. El jackpot de un club no modifica el acumulado ni la configuración de otro club.
 13. Reprocesar un evento de sorteo no cambia su resultado, premios ni ganador del jackpot.
+14. Cada ejecución respeta el orden `create_draw` → `wait_draw` → `draw` →
+    `update_tickets` y no genera las `balls` antes de `closesAt`.
+15. Con `closesAt = startsAt + 157 segundos`, una operación recibida en ese
+    timestamp o después queda fuera de la ventana de venta del sorteo.
 
 ## 16. Riesgos y decisiones pendientes
 
@@ -381,6 +415,9 @@ Debe conservarse un historial inmutable o equivalente de:
 - Definir el protocolo de compensación cuando backoffice no está disponible.
 - Definir la precisión escalada del porcentaje de contribución al jackpot.
 - Definir zona horaria, anclaje exacto y tolerancia operativa del schedule.
+- Definir la política de concurrencia si `update_tickets` continúa cuando
+  EventBridge Scheduler inicia el siguiente intervalo, así como el tratamiento
+  de retrasos y acumulación de ejecuciones.
 - Definir objetivos de disponibilidad, latencia, retención y recuperación ante desastres.
 - Identificar jurisdicciones objetivo y sus requisitos de licencia, certificación, juego responsable y protección de datos.
 

@@ -23,5 +23,5 @@ Todas las lecturas usan consistencia fuerte. El historial utiliza
 `ScanIndexForward=false` y `LastEvaluatedKey`; `beforeTir` excluye el resultado
 que ya se muestra como `last_drawn`. En `DRAW_DRAWN`, `tir` se completa con ceros
 a la izquierda para conservar el orden numérico. Step Functions actualiza
-`current_draw` en `create_draw` y `last_drawn` junto con el historial en
-`draw_balls`, de forma transaccional.
+`current_draw` en `create_draw` y `last_drawn` junto con el historial en `draw`,
+de forma transaccional.
