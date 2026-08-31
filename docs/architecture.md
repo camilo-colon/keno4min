@@ -1,36 +1,33 @@
 # Arquitectura
 
-Keno4min se organiza por funcionalidades mediante *vertical slices*. La razón
-de esta elección está registrada en el
-[ADR 0004](adrs/0004-organizar-el-codigo-por-vertical-slices.md).
+Keno4min usa *vertical slices*: cada funcionalidad mantiene juntos su dominio,
+casos de uso y adaptadores. Consulta el [ADR 0004](adrs/0004-organizar-el-codigo-por-vertical-slices.md).
 
-## Organización
-
-Cada slice puede incorporar esta estructura según la necesite:
+## Estructura
 
 ```text
-internal/<slice>/
-├── <slice>.go       # Modelo y reglas del dominio
-├── port.go          # Contratos de entrada y salida
-├── handler/         # Adaptadores de entrada, como HTTP o eventos
-├── service/         # Casos de uso, uno por archivo
-├── infrastructure/  # Persistencia e integraciones externas
-└── mock/            # Dobles reutilizables para pruebas
+cmd/{api,worker}/             # Arranque e inyección de dependencias
+internal/
+├── config/                   # Variables de entorno
+├── platform/awsclient/       # Clientes técnicos compartidos
+└── <slice>/                  # Una funcionalidad, por ejemplo draw
+    ├── <slice>.go, port.go   # Dominio y contratos
+    ├── handler/, service/    # Entradas y casos de uso
+    └── infrastructure/       # Persistencia e integraciones
 ```
 
-Los slices se incorporan de forma incremental. Actualmente el proyecto comienza
-con `draw`; los demás se crearán cuando se implemente su primer caso de uso.
+Las carpetas se crean solo cuando se necesitan; pruebas y mocks viven junto al
+código que verifican.
 
 ## Dependencias
 
 ```text
-handler ────────────> dominio y puertos
-service ────────────> dominio y puertos
-infrastructure ─────> dominio y puertos
+cmd ──> handler ──> service ──> dominio y puertos
+ ├──> infrastructure ─────────> dominio y puertos
+ └──> platform ───────────────> SDKs externos
 ```
 
+- El dominio y los puertos no importan Fiber, AWS ni infraestructura.
 - `service` no depende de `handler` ni de `infrastructure`.
-- Fiber, AWS y otros detalles externos no forman parte del dominio.
-- `cmd` crea las implementaciones y conecta sus dependencias.
-- Solo se crean las carpetas que cada slice utilice.
-- Las pruebas permanecen junto al código que verifican; `mock` es opcional.
+- `cmd` construye e inyecta las implementaciones concretas.
+- `platform` comparte clientes técnicos, pero no contiene lógica de negocio.

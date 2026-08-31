@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,13 +22,30 @@ const (
 	defaultShutdownTimeout = 10 * time.Second
 	defaultBodyLimit       = 4 * 1024 * 1024
 	defaultProxyHeader     = "X-Forwarded-For"
+	defaultAWSRegion       = "us-east-1"
+	defaultDynamoDBTable   = "keno4min-local"
 )
+
+var dynamoDBTableNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 // Config contains all process configuration.
 type Config struct {
 	AppName     string
 	Environment string
 	HTTP        HTTPConfig
+	AWS         AWSConfig
+	DynamoDB    DynamoDBConfig
+}
+
+// AWSConfig contains configuration shared by AWS service clients.
+type AWSConfig struct {
+	Region string
+}
+
+// DynamoDBConfig identifies the table provisioned for this service.
+type DynamoDBConfig struct {
+	TableName   string
+	EndpointURL string
 }
 
 // HTTPConfig controls the HTTP server and its browser-facing policy.
@@ -56,6 +74,36 @@ func Load() (Config, error) {
 type lookupEnv func(string) (string, bool)
 
 func load(lookup lookupEnv) (Config, error) {
+	environment := stringValue(lookup, "APP_ENV", defaultEnvironment)
+	localEnvironment := isLocalEnvironment(environment)
+
+	awsRegionFallback := ""
+	dynamoDBTableFallback := ""
+	if localEnvironment {
+		awsRegionFallback = defaultAWSRegion
+		dynamoDBTableFallback = defaultDynamoDBTable
+	}
+
+	awsRegion := stringValue(lookup, "AWS_REGION", awsRegionFallback)
+	if awsRegion == "" {
+		return Config{}, fmt.Errorf("AWS_REGION must not be empty outside development or test")
+	}
+
+	dynamoDBTable := stringValue(lookup, "DYNAMODB_TABLE_NAME", dynamoDBTableFallback)
+	if err := validateDynamoDBTableName(dynamoDBTable); err != nil {
+		return Config{}, fmt.Errorf("DYNAMODB_TABLE_NAME: %w", err)
+	}
+
+	dynamoDBEndpoint := stringValue(lookup, "DYNAMODB_ENDPOINT_URL", "")
+	if dynamoDBEndpoint != "" {
+		if !localEnvironment {
+			return Config{}, fmt.Errorf("DYNAMODB_ENDPOINT_URL is only allowed in development or test")
+		}
+		if err := validateDynamoDBEndpoint(dynamoDBEndpoint); err != nil {
+			return Config{}, fmt.Errorf("DYNAMODB_ENDPOINT_URL: %w", err)
+		}
+	}
+
 	readTimeout, err := durationValue(lookup, "HTTP_READ_TIMEOUT", defaultReadTimeout)
 	if err != nil {
 		return Config{}, err
@@ -93,7 +141,7 @@ func load(lookup lookupEnv) (Config, error) {
 
 	return Config{
 		AppName:     stringValue(lookup, "APP_NAME", defaultAppName),
-		Environment: stringValue(lookup, "APP_ENV", defaultEnvironment),
+		Environment: environment,
 		HTTP: HTTPConfig{
 			Address:         stringValue(lookup, "HTTP_ADDR", defaultHTTPAddress),
 			ReadTimeout:     readTimeout,
@@ -105,7 +153,18 @@ func load(lookup lookupEnv) (Config, error) {
 			ProxyHeader:     stringValue(lookup, "HTTP_PROXY_HEADER", defaultProxyHeader),
 			TrustedProxies:  trustedProxies,
 		},
+		AWS: AWSConfig{
+			Region: awsRegion,
+		},
+		DynamoDB: DynamoDBConfig{
+			TableName:   dynamoDBTable,
+			EndpointURL: dynamoDBEndpoint,
+		},
 	}, nil
+}
+
+func isLocalEnvironment(environment string) bool {
+	return strings.EqualFold(environment, "development") || strings.EqualFold(environment, "test")
 }
 
 func stringValue(lookup lookupEnv, key, fallback string) string {
@@ -173,6 +232,25 @@ func validateProxies(proxies []string) error {
 		if _, _, err := net.ParseCIDR(proxy); err != nil {
 			return fmt.Errorf("invalid IP address or CIDR %q", proxy)
 		}
+	}
+	return nil
+}
+
+func validateDynamoDBTableName(name string) error {
+	if len(name) < 3 || len(name) > 255 {
+		return fmt.Errorf("must contain between 3 and 255 characters")
+	}
+	if !dynamoDBTableNamePattern.MatchString(name) {
+		return fmt.Errorf("must contain only letters, numbers, underscores, hyphens, or periods")
+	}
+	return nil
+}
+
+func validateDynamoDBEndpoint(endpoint string) error {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("must be an absolute HTTP(S) URL without credentials, query, or fragment")
 	}
 	return nil
 }
