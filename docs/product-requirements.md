@@ -60,7 +60,7 @@ Keno4min es responsable de:
 - programar y registrar sorteos globales cada tres minutos;
 - extraer 20 números únicos de un universo del 1 al 80;
 - aceptar tiquetes con múltiples apuestas;
-- cerrar la venta y repetición de tiquetes tres segundos antes del sorteo;
+- cerrar la venta y repetición de tiquetes cuando el contador del sorteo alcanza `closesAt`;
 - anular tiquetes válidos antes del cierre;
 - contar aciertos y calcular premios con la tabla fija del juego;
 - conservar el historial y estado de cada tiquete;
@@ -101,7 +101,9 @@ Las integraciones financieras deben ser idempotentes: reintentar una solicitud n
 2. Todos los clubs participan en el mismo sorteo y comparten sus 20 números ganadores.
 3. Cada sorteo extrae 20 números distintos, sin reemplazo, del conjunto inclusivo `1..80`.
 4. Cada combinación válida de 20 números debe tener la misma probabilidad de ocurrir.
-5. El proceso de venta se cierra tres segundos antes del inicio programado.
+5. Cada sorteo tiene una ventana semiabierta `startsAt <= tiempo < closesAt`.
+   `closesAt` es el instante en que el contador visible llega a cero y se cierra
+   el proceso de venta; no se deriva restando tres segundos a otro tiempo.
 6. Durante el cierre no se pueden crear, repetir ni anular tiquetes para ese sorteo.
 7. Un disparador programado de Amazon EventBridge inicia el procesamiento cada tres minutos.
 8. La ejecución debe ser idempotente: el mismo sorteo no puede generar dos resultados ni liquidarse dos veces, aunque el evento sea entregado o reintentado más de una vez.
@@ -357,7 +359,7 @@ Debe conservarse un historial inmutable o equivalente de:
 ## 15. Criterios de aceptación principales
 
 1. Dados dos clubs distintos, ambos reciben los mismos 20 números para un sorteo global.
-2. Una solicitud recibida dentro de los tres segundos previos al sorteo no crea ni repite un tiquete para ese sorteo.
+2. Una solicitud recibida en `closesAt` o después no crea ni repite un tiquete para ese sorteo.
 3. Un tiquete con varias apuestas se liquida sumando el pago truncado de cada apuesta por separado.
 4. Dos apuestas idénticas dentro del mismo tiquete se aceptan y liquidan de forma independiente.
 5. Repetir un tiquete genera otro número de cupón y lo asocia con la partida abierta en ese momento.
