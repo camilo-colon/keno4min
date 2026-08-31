@@ -10,6 +10,7 @@ cmd/{api,worker}/             # Arranque e inyección de dependencias
 internal/
 ├── config/                   # Variables de entorno
 ├── platform/awsclient/       # Clientes técnicos compartidos
+├── platform/server/          # Servidor HTTP y middleware transversal
 └── <slice>/                  # Una funcionalidad, por ejemplo draw
     ├── <slice>.go, port.go   # Dominio y contratos
     ├── handler/, service/    # Entradas y casos de uso
@@ -30,4 +31,5 @@ cmd ──> handler ──> service ──> dominio y puertos
 - El dominio y los puertos no importan Fiber, AWS ni infraestructura.
 - `service` no depende de `handler` ni de `infrastructure`.
 - `cmd` construye e inyecta las implementaciones concretas.
-- `platform` comparte clientes técnicos, pero no contiene lógica de negocio.
+- `platform` comparte infraestructura técnica, como clientes y servidores, pero
+  no contiene lógica de negocio.

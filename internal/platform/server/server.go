@@ -1,5 +1,5 @@
-// Package httpapi configures and runs the public HTTP API.
-package httpapi
+// Package server configures and runs the public HTTP API.
+package server
 
 import (
 	"context"
@@ -238,8 +238,7 @@ func accessLog(logger *slog.Logger) fiber.Handler {
 }
 
 func errorStatus(err error) int {
-	var fiberErr *fiber.Error
-	if errors.As(err, &fiberErr) {
+	if fiberErr, ok := errors.AsType[*fiber.Error](err); ok {
 		return fiberErr.Code
 	}
 	return http.StatusInternalServerError

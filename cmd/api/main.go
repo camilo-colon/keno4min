@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/cronos/keno4min/internal/config"
-	"github.com/cronos/keno4min/internal/httpapi"
+	"github.com/cronos/keno4min/internal/platform/server"
 )
 
 func main() {
@@ -24,8 +24,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	server := httpapi.New(cfg, logger)
-	if err := server.Run(ctx); err != nil {
+	httpServer := server.New(cfg, logger)
+	if err := httpServer.Run(ctx); err != nil {
 		logger.Error("HTTP server failed", "error", err)
 		os.Exit(1)
 	}
