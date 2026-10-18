@@ -68,6 +68,57 @@ paths:
                 $ref: "#/components/schemas/APIVersion"
         default:
           $ref: "#/components/responses/Problem"
+  /api/v1/draws/{id}:
+    get:
+      summary: Get a draw by ID
+      operationId: getDrawByID
+      description: >-
+        Reads the canonical draw using one strongly consistent GetItem operation
+        with a five-second deadline. A missing draw returns 404; malformed stored
+        data or a draw whose ID differs from the requested ID returns 500.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: >-
+            Opaque draw identifier, URL-encoded as a path segment. Must not be
+            blank. The decoded ID is used exactly as supplied, without trimming
+            whitespace or changing case.
+          schema:
+            type: string
+            minLength: 1
+            pattern: '\S'
+          example: "draw-3573"
+      responses:
+        "200":
+          description: Canonical draw. An open or closed draw has an empty balls array.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Draw"
+              example:
+                draw_id: draw-3573
+                tir: 3573
+                status: open
+                starts_at: "2026-09-03T15:00:00Z"
+                closes_at: "2026-09-03T15:02:37Z"
+                balls: []
+                video_id: ""
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   headers:
     RequestID:
@@ -85,6 +136,61 @@ components:
           schema:
             $ref: "#/components/schemas/ProblemDetails"
   schemas:
+    Draw:
+      type: object
+      required:
+        - draw_id
+        - tir
+        - status
+        - starts_at
+        - closes_at
+        - balls
+        - video_id
+      properties:
+        draw_id:
+          type: string
+          minLength: 1
+        tir:
+          type: integer
+          minimum: 1
+          maximum: 18446744073709551615
+        status:
+          type: string
+          enum: [open, closed, drawn]
+        starts_at:
+          type: string
+          format: date-time
+          description: Start of the draw betting window, in UTC.
+        closes_at:
+          type: string
+          format: date-time
+          description: Exclusive end of the draw betting window, in UTC.
+        balls:
+          type: array
+          description: Ordered result; empty before the result is persisted.
+          items:
+            type: integer
+            minimum: 1
+            maximum: 80
+          maxItems: 20
+          uniqueItems: true
+        video_id:
+          type: string
+          description: Video identifier, or an empty string when absent.
+      allOf:
+        - if:
+            properties:
+              status:
+                const: drawn
+          then:
+            properties:
+              balls:
+                minItems: 20
+          else:
+            properties:
+              balls:
+                maxItems: 0
+      additionalProperties: false
     ServiceInfo:
       type: object
       required:

@@ -3,7 +3,7 @@
 Backend en Go para un juego de Keno independiente orientado inicialmente a puntos de venta. El producto contempla sorteos globales cada tres minutos, tiquetes con múltiples apuestas, liquidación mediante una tabla de pagos fija y jackpots independientes por club.
 
 > [!IMPORTANT]
-> El repositorio se encuentra en una etapa inicial. Actualmente contiene la base de la API HTTP; el motor de sorteos, los tiquetes, la liquidación y los jackpots descritos en el PRD todavía no están implementados.
+> El repositorio se encuentra en una etapa inicial. Incluye la base HTTP y la consulta de sorteos por ID en DynamoDB. El histórico y runtime aún no están implementados; las escrituras del ciclo se ejecutarán desde las tareas de Step Functions.
 
 ## Documentación
 
@@ -40,7 +40,7 @@ En `development` y `test`, la región y tabla usan `us-east-1` y
 valores son obligatorios y los endpoints personalizados se rechazan.
 
 Las credenciales no forman parte de la configuración propia de la aplicación.
-Cuando se incorpore el cliente de AWS, este utilizará la cadena estándar de
+El cliente AWS utiliza la cadena estándar de
 credenciales del SDK, incluidos perfiles locales y roles IAM del workload.
 Esta configuración inicial no realiza conexiones a AWS ni comprueba la
 existencia de la tabla.
@@ -48,20 +48,24 @@ existencia de la tabla.
 El cliente se construye mediante `internal/platform/awsclient`. La fábrica
 carga la cadena estándar de configuración del AWS SDK, aplica la región y, en
 entornos locales, configura el endpoint específico de DynamoDB. Crear el cliente
-no realiza solicitudes de red; el primer adaptador que lo necesite lo conectará
-desde `cmd` de esta forma:
+no realiza solicitudes a DynamoDB. `cmd/api` lo conecta al caso de uso y sus adaptadores:
 
 ```go
+// draw: internal/draw
+// drawdynamodb: internal/draw/dynamodb
+// drawhttp: internal/draw/http
 client, err := awsclient.NewDynamoDB(ctx, cfg.AWS, cfg.DynamoDB)
 if err != nil {
     // El proceso debe terminar porque la configuración del SDK es inválida.
 }
 
-repository := drawdynamodb.New(client, cfg.DynamoDB.TableName)
+store := drawdynamodb.NewStore(client, cfg.DynamoDB.TableName)
+query := draw.NewGetByID(store)
+httpServer.App().Get("/api/v1/draws/:id", drawhttp.NewHandler(query))
 ```
 
-El repositorio del ejemplo todavía no está implementado. El cliente se creará
-una sola vez por proceso y se compartirá mediante inyección de dependencias.
+El cliente se crea una sola vez por proceso y se comparte mediante inyección de
+dependencias. La consulta requiere `dynamodb:GetItem` sobre la tabla configurada.
 
 ## Endpoints iniciales
 
@@ -69,6 +73,10 @@ una sola vez por proceso y se compartirá mediante inyección de dependencias.
 - `GET /health/live`: liveness probe.
 - `GET /health/ready`: readiness probe.
 - `GET /api/v1`: raíz de la API v1.
+- `GET /api/v1/draws/{id}`: sorteo por ID, mediante una lectura fuerte.
+  Retorna `400` para un ID en blanco o con codificación URL inválida, `404` si no existe y `500` ante errores
+  internos. Consulta el [contrato de almacenamiento](docs/data-model/draw-access-patterns.md#contrato-implementado-para-la-consulta-por-id)
+  para los ítems que deben producir las tareas del workflow.
 
 ## Verificación
 

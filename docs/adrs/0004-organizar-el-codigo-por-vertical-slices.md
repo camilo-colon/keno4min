@@ -1,6 +1,6 @@
 # 0004. Organizar el código por vertical slices
 
-- Estado: Aceptada
+- Estado: Reemplazada por [ADR 0006](0006-organizar-slices-por-operacion.md)
 - Fecha: 2026-08-30
 - Responsables: Equipo de cronos
 
