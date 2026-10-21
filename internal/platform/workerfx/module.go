@@ -11,8 +11,8 @@ var Module = fx.Module(
 			NewWorker,
 			fx.ParamTags(`group:"subscribers"`),
 		),
-		fx.Invoke(func(lc fx.Lifecycle, worker *Worker) {
-			worker.Run(lc)
-		}),
 	),
+	fx.Invoke(func(lc fx.Lifecycle, worker *Worker) {
+		worker.Run(lc)
+	}),
 )

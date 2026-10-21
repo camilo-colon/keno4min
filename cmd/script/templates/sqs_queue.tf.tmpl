@@ -1,0 +1,33 @@
+resource "aws_sqs_queue" "{{ .Name }}-dl" {
+  name = replace({{ quote (printf "%s-dl" .Name) }}, "cronos-", "cronos-${var.environment}-")
+}
+
+resource "aws_sqs_queue" "{{ .Name }}" {
+  name = replace({{ quote .Name }}, "cronos-", "cronos-${var.environment}-")
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.{{ .Name }}-dl.arn
+    maxReceiveCount     = 3
+  })
+}
+
+resource "aws_sqs_queue_policy" "{{ .Name }}" {
+  queue_url = aws_sqs_queue.{{ .Name }}.url
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.{{ .Name }}.arn
+      Condition = {
+        ArnEquals = {
+          "aws:SourceArn" = [
+{{- range .RulePatterns }}
+            aws_cloudwatch_event_rule.{{ ruleName . }}.arn,
+{{- end }}
+          ]
+        }
+      }
+    }]
+  })
+}

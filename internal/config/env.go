@@ -1,4 +1,3 @@
-// Package config loads and validates process configuration.
 package config
 
 import (
@@ -46,7 +45,7 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) IsDevelopment() bool {
-	return strings.EqualFold(c.Environment, "development")
+	return strings.EqualFold(c.Environment, "dev")
 }
 
 func GetString(key string, fallback string) string {

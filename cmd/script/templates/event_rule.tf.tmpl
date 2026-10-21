@@ -1,0 +1,11 @@
+resource "aws_cloudwatch_event_rule" "{{ .Name }}" {
+  name           = replace({{ quote .Name }}, "cronos-", "cronos-${var.environment}-")
+  event_bus_name = var.event_bus_name
+  event_pattern = jsonencode({
+{{- if .Prefix }}
+    "detail-type" = [{ prefix = {{ quote .Pattern }} }]
+{{- else }}
+    "detail-type" = [{{ quote .Pattern }}]
+{{- end }}
+  })
+}

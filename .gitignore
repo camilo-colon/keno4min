@@ -1,3 +1,11 @@
 .env
 .env.*
 !.env.example
+/build/terraform/
+/infra/eventbridge/generated/
+/infra/eventbridge/.terraform/
+/infra/eventbridge/*.tfstate
+/infra/eventbridge/*.tfstate.*
+/infra/eventbridge/*.tfvars
+/infra/eventbridge/*.tfvars.json
+/infra/eventbridge/*.tfplan

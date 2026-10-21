@@ -1,0 +1,9 @@
+{{- range .QueueNames }}
+resource "aws_cloudwatch_event_target" "{{ $.RuleName }}-{{ . }}" {
+  rule           = aws_cloudwatch_event_rule.{{ $.RuleName }}.name
+  event_bus_name = var.event_bus_name
+  arn            = aws_sqs_queue.{{ . }}.arn
+
+  depends_on = [aws_sqs_queue_policy.{{ . }}]
+}
+{{ end -}}

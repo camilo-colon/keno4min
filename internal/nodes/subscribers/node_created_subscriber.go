@@ -5,39 +5,44 @@ import (
 	"errors"
 
 	"github.com/cronos/keno4min/internal/common"
-	"github.com/cronos/keno4min/internal/nodes"
 	"github.com/cronos/keno4min/internal/nodes/events"
-	"github.com/cronos/keno4min/internal/nodes/ports"
+	"github.com/cronos/keno4min/internal/nodes/usecase"
 )
 
 var _ common.DomainEventSubscriber = (*NodeCreatedSubscriber)(nil)
 
 type NodeCreatedSubscriber struct {
-	repositoy ports.Repository
+	create *usecase.Create
 }
 
-func NewNodeCretedSubscriber(repository ports.Repository) *NodeCreatedSubscriber {
+func NewNodeCretedSubscriber(create *usecase.Create) *NodeCreatedSubscriber {
 	return &NodeCreatedSubscriber{
-		repositoy: repository,
+		create: create,
 	}
 }
 
-func (h NodeCreatedSubscriber) On(context context.Context, domainEvent common.DomainEvent) error {
+func (h NodeCreatedSubscriber) On(ctx context.Context, domainEvent common.DomainEvent) error {
 	event, ok := domainEvent.(events.NodeCreatedDomainEvent)
 	if !ok {
 		return errors.New("domain event isn't NodeCreatedDomainEvent")
 	}
-	node := nodes.New(event.EventId, event.ParentId, event.NodeType, event.Name, event.Address, event.Currency, event.BalanceCents, event.Active)
-	if err := h.repositoy.Save(context, node); err != nil {
-		return err
-	}
-	return nil
+	return h.create.Execute(ctx, usecase.CreateParams{
+		ID:           event.NodeId,
+		ParentId:     event.ParentId,
+		Type:         event.NodeType,
+		Name:         event.Name,
+		Address:      event.Address,
+		TimeZone:     event.TimeZone,
+		Currency:     event.Currency,
+		BalanceCents: event.BalanceCents,
+		Active:       event.Active,
+	})
 }
 
-func (n NodeCreatedSubscriber) SubscribeTo() []string {
-	return []string{events.NodeCreatedDomainEventType}
+func (n NodeCreatedSubscriber) SubscribeTo() []common.DomainEvent {
+	return []common.DomainEvent{events.NodeCreatedDomainEvent{}}
 }
 
 func (n NodeCreatedSubscriber) Name() string {
-	return "cronos.keno4min.node.created"
+	return "cronos.keno4min.node.create_on_node_created"
 }

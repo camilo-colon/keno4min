@@ -83,3 +83,73 @@ dependencias. La consulta requiere `dynamodb:GetItem` sobre la tabla configurada
 ```sh
 go test ./...
 ```
+
+## Generar infraestructura de eventos
+
+```sh
+go run ./cmd/script
+```
+
+Ejecuta el comando desde la raíz del repositorio. Lee los suscriptores
+registrados en Fx y regenera `infra/eventbridge/generated/`:
+
+- `sqs_queue_<nombre>.tf`: cola, DLQ y permiso para recibir eventos.
+- `event_rule_<nombre>.tf`: regla por patrón de evento.
+- `event_target_<regla>.tf`: destinos SQS de cada regla.
+- `variables.tf`: nombre del bus existente (`event_bus_name`) y ambiente (`environment`).
+- `versions.tf`: requisito del provider AWS del módulo generado.
+
+Las plantillas están en `cmd/script/templates`. El script conserva el arranque
+actual con `.env` y configuración AWS, pero solo escribe archivos; no crea
+recursos. Los eventos exactos y los prefijos con `*` final se traducen a filtros
+sobre `detail-type`. La DLQ conserva `maxReceiveCount = 3`.
+
+`infra/eventbridge` es el proyecto Terraform que consume el módulo generado.
+Requiere Terraform >= 1.6 y credenciales AWS disponibles, por ejemplo mediante
+`AWS_PROFILE`. La primera vez, prepara los valores del despliegue:
+
+```sh
+cp infra/eventbridge/terraform.tfvars.example infra/eventbridge/terraform.tfvars
+```
+
+Edita `terraform.tfvars` con tu región, ambiente y nombre del bus existente.
+Terraform no carga el `.env` de la aplicación. Luego, desde la raíz:
+
+```sh
+go run ./cmd/script &&
+cd infra/eventbridge &&
+terraform init &&
+terraform plan
+
+# Después de revisar el plan:
+terraform apply
+```
+
+El proyecto configura el provider AWS 6.x y usa estado local en
+`infra/eventbridge/terraform.tfstate`. Conserva ese estado entre ejecuciones;
+para compartir despliegues configura un backend remoto en el proyecto raíz.
+No cambies de ambiente reutilizando el mismo estado: usa estados separados.
+Versiona `.terraform.lock.hcl`, creado por `terraform init`, para fijar la
+versión instalada del provider. El estado, `.terraform/`, los valores locales
+y la salida generada están ignorados por Git.
+
+Bus y colas deben estar en la misma cuenta y región. El bus no se crea aquí.
+El ambiente se inserta después de `cronos-` en los nombres físicos de colas, DLQ
+y reglas; por ejemplo, `cronos-dev-keno4min-node-created`. Los nombres de archivo y las
+referencias Terraform permanecen iguales. Estos valores se asignan al desplegar,
+no al ejecutar el generador.
+Cambiar el ambiente de recursos ya desplegados cambia sus nombres y puede
+reemplazar las colas; revisa el plan antes de aplicar.
+Si las colas ya existen y no están administradas por otro estado, impórtalas
+usando las direcciones `module.subscriptions.aws_sqs_queue.<nombre>` y
+`module.subscriptions.aws_sqs_queue.<nombre>-dl` y sus URL como ID.
+Si ya las administra otro proyecto Terraform, migra su estado antes de aplicar;
+no administres los mismos recursos desde dos estados.
+
+Cada ejecución elimina `generated/` completa y la vuelve a crear. No guardes
+archivos manuales ni estado dentro de esa carpeta. Eliminar un suscriptor
+retira sus definiciones; el siguiente plan propondrá eliminar sus recursos,
+conservando las reglas que todavía usan otros suscriptores. Solo `apply`
+modifica AWS. Si el script falla, no ejecutes Terraform hasta regenerar con
+éxito, porque la salida podría quedar incompleta. Modifica las plantillas en
+`cmd/script/templates` para cambiar las definiciones generadas.
