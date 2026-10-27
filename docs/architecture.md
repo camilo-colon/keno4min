@@ -25,15 +25,29 @@ internal/
 │   ├── usecase/             # Creación idempotente por ID
 │   ├── subscribers/         # Adaptación del evento al caso de uso
 │   ├── adapters/dynamodb/   # Lectura y escritura condicional
-│   └── usersfx/             # Registro Fx para worker y generador
-└── draw/
+│   └── usersfx/             # Repositorio compartido; worker y generador
+├── tickets/
+│   ├── ticket.go            # Entidad Ticket, apuesta Bet, estados y constructor Create
+│   ├── ports/
+│   │   └── repository.go    # Puerto de generación de cupones y guardado de tiquetes
+│   ├── usecase/
+│   │   └── create.go        # Consulta del usuario, generación del UUID y cupón, creación
+│   ├── ticketsfx/           # Registro Fx de creación y ruta raíz
+│   └── adapters/
+│       ├── dynamodb/
+│       │   ├── item.go      # Formato persistido de tiquete, apuestas y reserva
+│       │   └── repository.go # GenerateCoupon atómico y Save transaccional
+│       └── http/
+│           ├── create_ticket.go # Parseo, validaciones y respuesta JSON de creación
+│           └── routes.go    # GET /tickets, registrado en el router raíz
+└── draws/
     ├── draw.go              # Entidad y reglas de negocio
-    ├── get_by_id.go         # Caso de uso y contrato IDReader
-    ├── dynamodb/
-    │   ├── store.go         # Lectura del draw canónico mediante GetItem
-    │   └── item.go          # Formato almacenado y decodificación
-    └── http/
-        └── handler.go      # Ruta por ID, respuesta JSON y errores HTTP
+    ├── ports/               # Contrato de runtime e histórico de Draw
+    ├── usecase/             # GetRuntime y composición del histórico
+    ├── adapters/
+    │   ├── dynamodb/        # Lectura de runtime y GSI1; conversión de ítems
+    │   └── http/            # Ruta runtime y respuesta JSON
+    └── drawsfx/             # Registro Fx consumido por cmd/api
 ```
 
 Las pruebas viven junto al código que verifican. Los paquetes y archivos se
@@ -41,16 +55,40 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
 
 ## Dependencias
 
-- `draw` contiene la entidad, sus invariantes, los casos de uso y los contratos
-  pequeños que estos consumen. No importa Fiber, AWS ni sus adaptadores.
-- `draw/http` depende de `draw` y Fiber. Adapta parámetros, configura el plazo de
-  la petición y construye respuestas HTTP, incluidos nombres JSON, UTC y bolas
-  como array numérico.
-- `draw/dynamodb` depende de `draw` y el SDK AWS. Construye claves, lee y convierte
-  los datos, comprobando el formato de almacenamiento. Puede compartir esta
-  implementación entre operaciones del módulo.
+- `draws` contiene la entidad `Draw` y sus invariantes. No importa Fiber, AWS,
+  Fx, sus puertos ni sus adaptadores.
+- `draws/ports` define el contrato de persistencia y las proyecciones de runtime;
+  depende de `draws` para devolver entidades `Draw` por ID y en el histórico.
+- `draws/usecase` consume el puerto y compone la respuesta de runtime.
+- `draws/adapters/http` depende de los casos de uso y Fiber; serializa la
+  respuesta con bolas como arrays numéricos.
+- `draws/adapters/dynamodb` depende del dominio, sus puertos y el SDK AWS.
+  Construye claves, lee y convierte los datos almacenados.
+- `draws/drawsfx` registra el repositorio, caso de uso, handler y rutas. Esta
+  composición se mantiene fuera del dominio, como en `usersfx` y `nodesfx`,
+  para que los puertos y adaptadores puedan importar `Draw` sin ciclos.
+  Consulta el [ADR 0018](adrs/0018-separar-composicion-fx-del-dominio-draw.md).
 - Los adaptadores no se importan entre sí. Un adaptador puede implementar varios
   contratos pequeños; no se introduce un repositorio CRUD genérico.
+- `tickets` contiene `Ticket`, `Bet`, `Status` y el constructor `Create` con sus
+  validaciones de dominio. Depende únicamente de la biblioteca estándar, sin
+  importar HTTP ni persistencia.
+- `tickets/adapters/http` depende de Fiber, del caso de uso y del dominio.
+  Interpreta la query, reutiliza `tickets.ValidateBets` y serializa el tiquete
+  guardado con apuestas como arrays numéricos.
+- `tickets/ports` define `Repository.GenerateCoupon` y `Repository.Save`, y
+  depende del dominio `tickets` y `context`. `tickets/adapters/dynamodb`
+  implementa ese contrato usando el SDK
+  AWS y la configuración de la tabla. El formato persistido permanece en el
+  adaptador; no se agregan etiquetas de almacenamiento al dominio.
+- `tickets/usecase` depende del dominio `tickets`, de `tickets/ports`,
+  `users/ports` y `draws/ports`. Consulta al vendedor y obtiene el draw mediante
+  `GetCurrent`; no importa adaptadores, HTTP ni AWS.
+- `tickets/ticketsfx` compone repositorio, caso de uso, handler y rutas.
+  `cmd/api` agrega este módulo y `usersfx.RepositoryModule`; el worker reutiliza
+  el mismo módulo de repositorio de usuarios sin cargar HTTP.
+- `serverfx` registra el grupo Fx `rootRoutes` en la raíz y conserva `routes`
+  bajo `/v1`. Consulta el [ADR 0020](adrs/0020-conectar-creacion-http-de-tiquetes.md).
 - `cmd/api` construye el cliente AWS, el store, el caso de uso y el handler, y
   registra la ruta. `platform` comparte infraestructura técnica, no negocio.
 
@@ -80,8 +118,16 @@ el ID solicitado. Devuelve la entidad validada al adaptador HTTP.
 `draw.New` usa la misma validación al crear un sorteo. Los errores de datos
 almacenados se distinguen de los errores de parámetros de la petición.
 
-La consulta por TIR anterior fue retirada. Las consultas por TIR, histórico y
-runtime conservan su diseño de acceso documentado, pero no tienen implementación.
+La consulta por TIR anterior fue retirada y conserva su diseño de acceso
+documentado. `draws/ports.Repository.GetLatestDraws` devuelve hasta diez
+entidades `draw.Draw`. El adaptador `draws/adapters/dynamodb` consulta `GSI1`
+con `GSI1PK = DRAW#DRAWN` en orden descendente de `GSI1SK`, sin lecturas
+adicionales por resultado. `draws/usecase.GetRuntime` consume esta consulta
+después de leer el runtime y mapea cada resultado a `history` con TIR y bolas,
+conservando el orden del repositorio. `GET /v1/draws/runtime` incluye ese histórico
+y propaga como error interno el fallo de cualquiera de las lecturas.
+`draws/adapters/dynamodb.GetRuntime` lee la proyección `DRAW_RUNTIME/META`
+mediante un `GetItem` fuertemente consistente y la convierte a `ports.Runtime`.
 Las futuras consultas del draw completo pueden reutilizar el dominio y la
 persistencia; las proyecciones parciales mantienen sus contratos específicos.
 
@@ -163,25 +209,79 @@ la asociación enviada por backoffice, sin imponer un orden entre ambas colas.
 El módulo no administra autenticación ni permisos. Consulta el
 [modelo de usuarios](data-model/user-access-patterns.md).
 
-## Creación de tiquetes prevista
+## Creación de tiquetes
 
-La creación de tiquetes todavía no está implementada. El contrato HTTP y las
-reglas acordadas están en el [PRD, sección 7.3](product-requirements.md#73-creación).
+`internal/tickets/ticket.go` implementa `Ticket`, `Bet`, sus estados y el
+constructor `Create`. `tickets/usecase.Create` implementa la coordinación de
+la consulta del usuario, la generación del UUID v7 y del cupón, y el guardado.
+El contrato HTTP y las reglas acordadas están en el
+[PRD, sección 7.3](product-requirements.md#73-creación).
 El [modelo de tiquetes](data-model/ticket-access-patterns.md) define el dominio
 `Ticket` y `Bet`, sus atributos persistidos, el contador global y la reserva
-exclusiva del cupón. El [ADR 0017](adrs/0017-conservar-vendedor-como-created-by.md)
-registra la decisión vigente: el frontend envía el UUID y `userId`; la creación
-consulta al usuario y conserva `user.NodeId` como club de la venta y
+exclusiva del cupón. El [ADR 0019](adrs/0019-generar-identificador-del-tiquete-en-el-backend.md)
+registra la decisión vigente: el backend genera el UUID v7 y el frontend envía
+`userId`; la creación consulta al usuario y conserva `user.NodeId` como club de la venta y
 `user.Username` en `CreatedBy` como nombre histórico del vendedor. El tiquete
 no conserva el UUID del usuario; `userId` se usa para consultarlo durante la
 creación. El listado incluirá `createdBy` y TIR desde los datos del tiquete,
 evitando consultas por cada fila.
 
+El tiquete se asocia al sorteo mediante su TIR, sin guardar un UUID adicional
+del draw. El total se deriva de las apuestas. `Create` valida los datos del
+dominio y detecta desbordamientos de la suma local, conserva las apuestas y fija
+el estado `pending` y la hora UTC de creación. Solo exige que el cupón no esté
+vacío; su formato corresponde a `Repository.GenerateCoupon`.
+
 El [flujo de la etapa actual](product-requirements.md#733-flujo-de-creación-de-la-etapa-actual)
-aplaza la autenticación y permisos, las comprobaciones del club, la validación
-del estado y horario del sorteo y la idempotencia. La comprobación y descuento
-de saldo y la resolución del draw para obtener `DrawID` y `TIR` siguen pendientes.
-Esta previsión no cambia las rutas implementadas ni introduce paquetes nuevos.
+aplaza autenticación, permisos, comprobaciones del club e idempotencia.
+El saldo y su descuento siguen
+pendientes. El handler recibe `userId`, `stv` y `sum`, sin body, e invoca el caso
+de uso. Rechaza parámetros desconocidos, repetidos o vacíos y entradas inválidas
+antes de acceder a persistencia. Usa `ValidateBets` para reutilizar las reglas
+del dominio y detectar desbordamientos. Todas sus respuestas usan
+`Cache-Control: no-store`. El manejo explícito de `HEAD` queda pendiente.
+
+`ticketsfx.Module` registra `GET /tickets` en `rootRoutes`. La ruta queda en la
+raíz y el runtime conserva `/v1/draws/runtime`. El contrato JSON, los códigos
+HTTP se definen en el PRD, sección 7.3.8. Los límites técnicos configurables de
+cantidad de apuestas y longitud de query quedan pendientes.
+
+`usecase.NewCreate` recibe los repositorios de tiquetes, usuarios y sorteos.
+`Execute` recibe `CreateParams` con `UserID` y `Bets`. Consulta `FindById` y
+devuelve `ErrUserNotFound` si no existe. Después obtiene el draw canónico con
+`draws.Repository.GetCurrent` y llama a `Draw.AcceptsTicketsAt` con la hora UTC
+del servidor antes del contador. El repositorio encapsula `GetRuntime` y
+`FindByID` usando `Current.DrawId`, comprueba la referencia y coincidencia del
+TIR, sin consultar el histórico. Un rechazo devuelve `ErrBettingClosed`;
+el handler responde `409`. Los datos ausentes o inválidos devuelven `503`.
+La comprobación se realiza antes de guardar, sin una condición sobre el draw
+en la transacción. Consulta el
+[ADR 0021](adrs/0021-validar-ventana-del-sorteo-al-crear-tiquetes.md).
+
+Después genera cupón y UUID v7, construye con `tickets.Create` usando el nodo y
+username del usuario, y guarda mediante `Save`. Solo devuelve el tiquete tras
+un guardado exitoso. Propaga el contexto; los errores o la ausencia de draw en
+`GetCurrent` se clasifican como `ErrDrawUnavailable`. El constructor mantiene sus
+validaciones, aunque el adaptador ya haya validado las apuestas. Un rechazo
+posterior al incremento puede dejar un salto permitido en el contador.
+
+`tickets/ports.Repository` expone `GenerateCoupon(context.Context)
+(string, error)` y `Save(context.Context, *tickets.Ticket) error`. El método
+`GenerateCoupon` incrementa atómicamente el contador global existente y
+formatea el valor devuelto con padding mínimo de cuatro posiciones. El
+registro inicial debe prepararse una sola vez en el entorno; el método no lo
+recrea ni reinicia si falta o se agota.
+
+`Save`, en el mismo adaptador `tickets/adapters/dynamodb`, guarda el tiquete
+canónico y reserva el cupón mediante un único
+`TransactWriteItems`, con condiciones de no existencia para ambos ítems.
+Los duplicados y demás errores se propagan; no hay escrituras alternativas
+tras una cancelación. El mapeo convierte los números de cada apuesta a una
+lista numérica y serializa `CreatedAt` en UTC sin modificar la entidad.
+
+El repositorio recibe el cliente DynamoDB compartido y `config.Config` mediante
+`NewDynamodbRepository`. `ticketsfx.Module` lo registra y conecta al handler
+HTTP mediante el caso de uso. Las operaciones financieras siguen pendientes.
 
 ## Infraestructura de suscripciones
 

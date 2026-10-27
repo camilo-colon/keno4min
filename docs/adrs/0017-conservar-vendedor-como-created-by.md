@@ -1,9 +1,10 @@
 # 0017. Conservar el vendedor como CreatedBy
 
-- Estado: Aceptada
+- Estado: Reemplazada
 - Fecha: 2026-10-21
 - Responsables: Equipo de cronos
 - Reemplaza: [ADR 0016](0016-recibir-usuario-y-conservar-club-en-el-tiquete.md)
+- Reemplazada por: [ADR 0019](0019-generar-identificador-del-tiquete-en-el-backend.md)
 
 ## Contexto
 
