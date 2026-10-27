@@ -74,7 +74,7 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
   validaciones de dominio. Depende únicamente de la biblioteca estándar, sin
   importar HTTP ni persistencia.
 - `tickets/adapters/http` depende de Fiber, del caso de uso y del dominio.
-  Interpreta la query, reutiliza `tickets.ValidateBets` y serializa el tiquete
+  Interpreta la query y serializa el tiquete
   guardado con apuestas como arrays numéricos.
 - `tickets/ports` define `Repository.GenerateCoupon` y `Repository.Save`, y
   depende del dominio `tickets` y `context`. `tickets/adapters/dynamodb`
@@ -236,9 +236,9 @@ El [flujo de la etapa actual](product-requirements.md#733-flujo-de-creación-de-
 aplaza autenticación, permisos, comprobaciones del club e idempotencia.
 El saldo y su descuento siguen
 pendientes. El handler recibe `userId`, `stv` y `sum`, sin body, e invoca el caso
-de uso. Rechaza parámetros desconocidos, repetidos o vacíos y entradas inválidas
-antes de acceder a persistencia. Usa `ValidateBets` para reutilizar las reglas
-del dominio y detectar desbordamientos. Todas sus respuestas usan
+de uso. Comprueba la estructura de la query, el UUID y la conversión de números
+e importes antes de acceder a persistencia. Las reglas de las apuestas y el
+desbordamiento del total se validan al construir el tiquete. Todas sus respuestas usan
 `Cache-Control: no-store`. El manejo explícito de `HEAD` queda pendiente.
 
 `ticketsfx.Module` registra `GET /tickets` en `rootRoutes`. La ruta queda en la
@@ -277,7 +277,15 @@ canónico y reserva el cupón mediante un único
 `TransactWriteItems`, con condiciones de no existencia para ambos ítems.
 Los duplicados y demás errores se propagan; no hay escrituras alternativas
 tras una cancelación. El mapeo convierte los números de cada apuesta a una
-lista numérica y serializa `CreatedAt` en UTC sin modificar la entidad.
+lista numérica sin modificar la entidad.
+
+El adaptador conserva `CreatedAt` como `time.Time` en el dominio y persiste
+`createdAt` como Number mediante `UnixMilli()`. El mismo ítem incluye las
+claves del listado por TIR en `GSI1` y por nodo y fecha en `GSI2`, cuyo sort key
+es `createdAt`. El despliegue de esos índices pertenece al repositorio central
+de infraestructura; las consultas todavía no están implementadas. Consulta el
+[modelo de tiquetes](data-model/ticket-access-patterns.md#índices-de-consulta) y el
+[ADR 0022](adrs/0022-indexar-tiquetes-y-persistir-fecha-en-milisegundos.md).
 
 El repositorio recibe el cliente DynamoDB compartido y `config.Config` mediante
 `NewDynamodbRepository`. `ticketsfx.Module` lo registra y conecta al handler

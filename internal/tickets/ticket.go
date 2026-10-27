@@ -69,11 +69,11 @@ func (t Ticket) validate() error {
 	if t.Coupon == "" {
 		return errors.New("coupon is required")
 	}
-	return ValidateBets(t.Bets)
+	return validateBets(t.Bets)
 }
 
-// ValidateBets checks selections, values and total overflow before a sale is processed.
-func ValidateBets(bets []Bet) error {
+// validateBets checks selections, values and total overflow before a sale is processed.
+func validateBets(bets []Bet) error {
 	if len(bets) == 0 {
 		return errors.New("ticket must contain at least one bet")
 	}

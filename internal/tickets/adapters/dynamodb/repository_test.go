@@ -245,6 +245,9 @@ func TestSaveWritesTicketAndCouponInOneTransaction(t *testing.T) {
 		wantTicket := map[string]any{
 			"PK":        map[string]any{"S": "TICKET#" + ticket.ID.String()},
 			"SK":        map[string]any{"S": "META"},
+			"GSI1PK":    map[string]any{"S": "TICKETS#TIR#18446744073709551615"},
+			"GSI1SK":    map[string]any{"S": "TICKET#" + ticket.ID.String()},
+			"GSI2PK":    map[string]any{"S": "TICKETS#NODE#" + ticket.NodeID.String()},
 			"ticketId":  map[string]any{"S": ticket.ID.String()},
 			"coupon":    map[string]any{"S": "0001"},
 			"nodeId":    map[string]any{"S": ticket.NodeID.String()},
@@ -252,7 +255,7 @@ func TestSaveWritesTicketAndCouponInOneTransaction(t *testing.T) {
 			"bets":      map[string]any{"L": []any{bet, bet}},
 			"status":    map[string]any{"S": "pending"},
 			"createdBy": map[string]any{"S": "SellerName"},
-			"createdAt": map[string]any{"S": "2026-10-21T13:30:45.123456789Z"},
+			"createdAt": map[string]any{"N": "1792589445123"},
 		}
 		wantCoupon := map[string]any{
 			"PK":       map[string]any{"S": "COUPON#0001"},

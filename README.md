@@ -27,8 +27,10 @@ La configuración usa variables de entorno; consulta [`.env.example`](.env.examp
 ## AWS y DynamoDB
 
 La tabla, sus índices y los permisos IAM se administran en el repositorio
-central de infraestructura. Keno4min recibe únicamente la configuración de
-runtime:
+central de infraestructura. El esquema requerido de `GSI1` y `GSI2`, junto
+con la migración a `createdAt`, se documenta en el
+[modelo de tiquetes](docs/data-model/ticket-access-patterns.md#índices-de-consulta).
+Keno4min recibe únicamente la configuración de runtime:
 
 - `AWS_REGION`: región donde está desplegada la tabla.
 - `DYNAMODB_TABLE_NAME`: nombre físico de la tabla asignada al entorno.

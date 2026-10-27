@@ -81,9 +81,6 @@ func parseCreateTicket(ctx fiber.Ctx) (usecase.CreateParams, error) {
 		}
 		bets[i].ValueCents = int64(value)
 	}
-	if err := tickets.ValidateBets(bets); err != nil {
-		return usecase.CreateParams{}, err
-	}
 	return usecase.CreateParams{UserID: userID, Bets: bets}, nil
 }
 

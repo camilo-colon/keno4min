@@ -1,7 +1,7 @@
 package dynamodb
 
 import (
-	"time"
+	"strconv"
 
 	"github.com/cronos/keno4min/internal/tickets"
 )
@@ -9,6 +9,9 @@ import (
 type ticketItem struct {
 	PK        string    `dynamodbav:"PK"`
 	SK        string    `dynamodbav:"SK"`
+	GSI1PK    string    `dynamodbav:"GSI1PK"`
+	GSI1SK    string    `dynamodbav:"GSI1SK"`
+	GSI2PK    string    `dynamodbav:"GSI2PK"`
 	TicketID  string    `dynamodbav:"ticketId"`
 	Coupon    string    `dynamodbav:"coupon"`
 	NodeID    string    `dynamodbav:"nodeId"`
@@ -16,7 +19,7 @@ type ticketItem struct {
 	Bets      []betItem `dynamodbav:"bets"`
 	Status    string    `dynamodbav:"status"`
 	CreatedBy string    `dynamodbav:"createdBy"`
-	CreatedAt string    `dynamodbav:"createdAt"`
+	CreatedAt int64     `dynamodbav:"createdAt"`
 }
 
 type betItem struct {
@@ -43,6 +46,9 @@ func toItem(ticket *tickets.Ticket) ticketItem {
 	return ticketItem{
 		PK:        "TICKET#" + ticket.ID.String(),
 		SK:        "META",
+		GSI1PK:    "TICKETS#TIR#" + strconv.FormatUint(ticket.TIR, 10),
+		GSI1SK:    "TICKET#" + ticket.ID.String(),
+		GSI2PK:    "TICKETS#NODE#" + ticket.NodeID.String(),
 		TicketID:  ticket.ID.String(),
 		Coupon:    ticket.Coupon,
 		NodeID:    ticket.NodeID.String(),
@@ -50,6 +56,6 @@ func toItem(ticket *tickets.Ticket) ticketItem {
 		Bets:      bets,
 		Status:    string(ticket.Status),
 		CreatedBy: ticket.CreatedBy,
-		CreatedAt: ticket.CreatedAt.UTC().Format(time.RFC3339Nano),
+		CreatedAt: ticket.CreatedAt.UnixMilli(),
 	}
 }

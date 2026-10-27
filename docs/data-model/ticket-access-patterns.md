@@ -4,6 +4,10 @@ Estado: creación HTTP conectada al caso de uso, lectura del TIR desde runtime,
 generación de cupones y guardado transaccional implementados. Las lecturas de
 tiquetes y la aceptación financiera siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
+El guardado incluye las claves para consultar por TIR y por nodo y fecha, y
+persiste la fecha como milisegundos Unix. El despliegue de los índices pertenece
+al repositorio central de infraestructura; consulta el
+[ADR 0022](../adrs/0022-indexar-tiquetes-y-persistir-fecha-en-milisegundos.md).
 Las reglas del producto y el
 contrato de entrada viven en el [PRD, sección 7](../product-requirements.md#7-tiquetes-y-apuestas).
 La decisión vigente está en el [ADR 0019](../adrs/0019-generar-identificador-del-tiquete-en-el-backend.md).
@@ -16,10 +20,10 @@ declaraciones y los valores de `Status` están implementados en
 referencia para los tipos Go. `Create(id, coupon, nodeID, tir, bets, createdBy)`
 devuelve `(*Ticket, error)` y realiza las validaciones propias del dominio.
 El constructor delega en el método privado `Ticket.validate() error`, que
-valida los datos del tiquete y llama a `ValidateBets` para las apuestas. Un
+valida los datos del tiquete y llama a la función privada `validateBets` para las apuestas. Un
 error conserva el motivo del rechazo; la validación no modifica el tiquete.
 El [adaptador HTTP](../../internal/tickets/adapters/http/create_ticket.go)
-interpreta la query, valida las apuestas con `ValidateBets` y ejecuta el caso
+interpreta la query y ejecuta el caso
 de uso. `ticketsfx.Module` conecta el flujo y registra `GET /tickets` en la
 raíz. El contrato HTTP y su respuesta se definen en el PRD, sección 7.3.8.
 
@@ -76,8 +80,8 @@ no es un campo del dominio ni se persiste como atributo del tiquete. `Create`
 mantiene una suma local únicamente para rechazar desbordamientos de `int64`.
 El adaptador HTTP usa `strconv.ParseUint` con 8 bits antes de convertir a
 `uint8`, impidiendo que una conversión oculte negativos o desbordamientos.
-Después reutiliza `ValidateBets` para exigir números entre `1` y `80`, valores
-positivos y una suma sin desbordamiento, antes de consultar repositorios.
+El constructor usa `validateBets` para exigir números entre `1` y `80`, valores
+positivos y una suma sin desbordamiento; el adaptador no repite esa validación.
 
 Se conserva el orden y la multiplicidad de las apuestas; cada `Bet` no requiere
 un identificador propio. `Create` conserva los slices recibidos, sin copia
@@ -118,7 +122,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | `TIR` | `tir` | Number, entero positivo `uint64`, copiado del draw asociado |
 | `Bets` | `bets` | List de Map; cada mapa contiene `nums` (List de Number) y `valueCents` (Number) |
 | `Status` | `status` | String, valor del estado del dominio |
-| `CreatedAt` | `createdAt` | String, RFC 3339 en UTC |
+| `CreatedAt` | `createdAt` | Number, entero `int64` de milisegundos desde Unix epoch |
 
 Los UUID se almacenan en su representación canónica con guiones. El adaptador
 usa `ticketItem`, `betItem` y `couponItem`, con etiquetas `dynamodbav`, y
@@ -126,8 +130,12 @@ usa `ticketItem`, `betItem` y `couponItem`, con etiquetas `dynamodbav`, y
 que `nums` se serializa como List de Number y no como el binario que produciría
 `[]uint8`. Los valores monetarios se conservan como enteros `int64` y el TIR
 como `uint64`, sin conversiones a coma flotante.
-`createdAt` se normaliza a UTC y se formatea con `time.RFC3339Nano`, sin cambiar
-el timestamp del objeto de dominio.
+`CreatedAt` conserva su tipo `time.Time` en el dominio. El adaptador persiste
+`CreatedAt.UnixMilli()` como `createdAt`, descartando la precisión inferior al
+milisegundo sin modificar el objeto de dominio. El timestamp representa un
+instante independiente de la zona horaria. Una futura lectura reconstruirá
+el valor con `time.UnixMilli(createdAt).UTC()`. La respuesta HTTP de creación
+conserva `createdAt` en RFC 3339 y la precisión del objeto de dominio.
 Las apuestas duplicadas conservan posiciones independientes en `bets`.
 `value_cents` es el nombre conceptual usado en el PRD; `valueCents` corresponde
 al atributo persistido. El JSON de respuesta HTTP se define en el PRD, sección 7.3.8.
@@ -139,13 +147,81 @@ eliminan al anular un tiquete. No se requiere un GSI ni un `Scan` para garantiza
 la unicidad o localizar un tiquete por cupón.
 
 `ticketId` se genera en el caso de uso mediante `uuid.NewV7()` al crear el
-tiquete. El frontend no envía ese identificador. Las claves y el formato
-persistido se conservan; no se requiere migrar los tiquetes existentes.
+tiquete. El frontend no envía ese identificador. Las claves canónicas y de
+reserva se conservan. Los tiquetes anteriores al ADR 0022 requieren completar
+los atributos de los índices y convertir su fecha; consulta la migración abajo.
 Un nuevo UUID no identifica reintentos de una venta; la idempotencia sigue pendiente.
 
-Los atributos adicionales para operaciones posteriores, los índices para
-liquidación e históricos y los registros de idempotencia y coordinación con
+Los atributos adicionales para operaciones posteriores, el acceso para
+liquidación y los registros de idempotencia y coordinación con
 backoffice quedan pendientes.
+
+## Índices de consulta
+
+El ítem canónico incluye estos atributos adicionales. La reserva de cupón y el
+contador no los incluyen, por lo que no participan en los índices de tiquetes.
+
+| Atributo | Tipo | Valor |
+| --- | --- | --- |
+| `GSI1PK` | String | `TICKETS#TIR#<tir>`; TIR decimal sin padding |
+| `GSI1SK` | String | `TICKET#<ticketId>` |
+| `GSI2PK` | String | `TICKETS#NODE#<nodeId>` |
+
+El esquema a configurar en el repositorio central de infraestructura es:
+
+| Índice | Partition key | Sort key | Proyección |
+| --- | --- | --- | --- |
+| `GSI1`, existente y compartido | `GSI1PK` (String) | `GSI1SK` (String) | Conservar los atributos de usuarios, nodos y draws; incluir además `ticketId`, `coupon`, `nodeId`, `tir`, `bets`, `status`, `createdBy` y `createdAt` |
+| `GSI2`, nuevo | `GSI2PK` (String) | `createdAt` (Number) | `ALL` |
+
+Si `GSI1` ya usa `ALL`, su esquema y proyección no requieren cambios. Si usa
+`INCLUDE`, verificar la unión de atributos requerida; cambiar la proyección de
+un índice existente requiere recrearlo y coordinar sus consumidores. Las
+claves `PK` y `SK` de la tabla se proyectan automáticamente. El prefijo
+`TICKETS#` separa estas consultas de los demás tipos de ítem de `GSI1`.
+
+`GSI1` ordena por UUID de tiquete; no ofrece un orden estricto por `CreatedAt`.
+`GSI2` ordena numéricamente por fecha y permite orden descendente. Varios
+tiquetes pueden compartir un milisegundo: en un GSI se permiten claves
+repetidas, pero el orden entre esos tiquetes no está garantizado. La paginación
+deberá usar `LastEvaluatedKey` completo, incluidas las claves de la tabla, y no
+un cursor basado únicamente en la fecha.
+
+Las lecturas serán `Query` con condiciones sobre las claves, sin `Scan` ni
+filtros para resolver TIR, nodo o rango. Para el rango `[from, to)`, el contrato
+previsto recibe `time.Time` con precisión de milisegundos y exige `from < to`.
+El adaptador consultará `createdAt BETWEEN from.UnixMilli() AND
+to.UnixMilli()-1`, porque `BETWEEN` incluye ambos extremos. El futuro handler
+deberá exigir fechas RFC 3339 con zona y rechazar precisión inferior al
+milisegundo en los límites. El dominio continúa trabajando con `time.Time`.
+
+Ambos índices son eventualmente consistentes: un listado puede tardar en
+reflejar una venta o cambio de estado. El listado por TIR no define un acceso
+seguro para enumerar todas las ventas durante la liquidación. Esa operación
+requiere diseñar la coordinación con el cierre y su garantía de completitud.
+Los métodos de lectura y los endpoints todavía no están implementados.
+
+### Despliegue y datos existentes
+
+1. Verificar la proyección de `GSI1` y crear `GSI2` con los tipos y proyección
+   anteriores; esperar a que los índices estén `ACTIVE` antes de habilitar lecturas.
+2. Desplegar el escritor que guarda `createdAt` y las claves de ambos índices.
+3. Para cada tiquete anterior cuyo `createdAt` sea String, interpretarlo con
+   `time.RFC3339Nano` y reemplazarlo por un Number con `UnixMilli()`. Si ya es
+   Number en milisegundos, conservarlo. Completar `GSI1PK`, `GSI1SK` y `GSI2PK`
+   a partir del TIR, nodo e ID canónicos. Escribir la fecha numérica y las claves
+   en la misma actualización, condicionada a la existencia e identidad del
+   tiquete y al valor de fecha leído; conservar apuestas, estado y reservas.
+   Una fecha inválida requiere revisión, sin inventar un timestamp.
+4. Verificar la cobertura antes de habilitar las nuevas consultas. El backfill
+   automático de DynamoDB solo indexa ítems que ya tienen las claves requeridas;
+   no calcula estos atributos para los tiquetes antiguos.
+
+Este cambio no ejecuta la creación de índices ni la migración en AWS. La
+aplicación no modifica el esquema de la tabla al arrancar. El nombre persistido
+`createdAt` se conserva, pero su tipo cambia de String a Number. Los lectores
+existentes deben admitir ambos tipos durante la migración antes de retirar el
+soporte para texto. Las nuevas escrituras solo persisten el valor numérico.
 
 ## Lectura del vendedor y club
 
@@ -174,14 +250,17 @@ lectura o condición sobre el draw al guardar. Consulta el
 ## Patrones de acceso
 
 `AP-TICKET-01` está implementado por `Repository.GenerateCoupon` y
-`AP-TICKET-02` por `Repository.Save`. `AP-TICKET-03` describe el diseño previsto
-y todavía no está implementado.
+`AP-TICKET-02` por `Repository.Save`, incluyendo los atributos de los índices.
+`AP-TICKET-03`, `AP-TICKET-04` y `AP-TICKET-05` describen lecturas previstas que
+todavía no están implementadas.
 
 | ID | Operación | Acceso | Condición o consistencia |
 | --- | --- | --- | --- |
 | `AP-TICKET-01` | Asignar el siguiente consecutivo | `UpdateItem` en `COUNTER#TICKET` / `META` | Contador existente y dentro del intervalo; devuelve el nuevo valor |
 | `AP-TICKET-02` | Guardar tiquete y reservar cupón | `TransactWriteItems`, con dos `Put` en el tiquete y su reserva | `attribute_not_exists(PK)` en cada `Put` |
 | `AP-TICKET-03` | Resolver un tiquete por cupón | `GetItem` en `COUPON#<coupon>` / `META`; luego `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte en ambas operaciones |
+| `AP-TICKET-04` | Listar tiquetes por TIR | `Query` en `GSI1`, `GSI1PK = TICKETS#TIR#<tir>` | Eventual; paginar hasta agotar resultados |
+| `AP-TICKET-05` | Listar tiquetes por nodo y rango de creación | `Query` en `GSI2`, `GSI2PK = TICKETS#NODE#<nodeId>` y rango numérico sobre `createdAt` | Eventual; rango `[from, to)` y cursor completo |
 
 `AP-TICKET-03` es un acceso interno previsto, no un endpoint de consulta ya
 definido. Conocer el cupón no sustituye la autorización del cajero.
@@ -279,9 +358,9 @@ El repositorio está conectado a Fx y al handler HTTP mediante `ticketsfx.Module
 `GenerateCoupon` asigna el consecutivo y devuelve el cupón formateado;
 `Save` recibe ese cupón ya asignado. `tickets/usecase.Create` coordina ambos
 métodos: consulta al usuario y el TIR actual, genera el cupón y el UUID v7, llama a `tickets.Create` con
-`user.NodeId` y `user.Username`, y guarda el resultado. El adaptador reutiliza
-`ValidateBets` antes de acceder a repositorios; el constructor conserva esas
-reglas y sus comprobaciones restantes. Un rechazo posterior al incremento
+`user.NodeId` y `user.Username`, y guarda el resultado. El constructor valida
+las apuestas mediante `validateBets`, además de sus comprobaciones restantes.
+Un rechazo posterior al incremento
 puede dejar un salto permitido. No se recupera ni decrementa el
 consecutivo. La aceptación financiera sigue pendiente.
 

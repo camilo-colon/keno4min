@@ -392,9 +392,9 @@ con `uuid.NewV7()` y construye el tiquete con `tickets.Create`, copiando
 dominio. Si lo acepta, ejecuta `Save` y devuelve el tiquete guardado.
 
 Todos los errores se propagan y detienen el flujo; un fallo de `Save` no
-devuelve un tiquete como resultado exitoso. El adaptador valida las apuestas
-antes del caso de uso reutilizando `ValidateBets`; el constructor mantiene
-esas reglas y las comprobaciones restantes después de generar el cupón.
+devuelve un tiquete como resultado exitoso. El adaptador interpreta las apuestas;
+el constructor aplica `validateBets` y las comprobaciones restantes después
+de generar el cupón.
 Un rechazo posterior puede consumir un consecutivo sin guardarlo, conforme a
 los saltos permitidos. No se duplican las reglas ni se reutiliza ese consecutivo.
 
@@ -430,7 +430,7 @@ reservar el cupón. El JSON contiene `id`, `coupon` (texto con ceros iniciales),
 
 | HTTP | Situación |
 | --- | --- |
-| `400` | Query inválida, parámetros desconocidos/repetidos/vacíos, body, UUID o apuestas inválidos |
+| `400` | Query inválida, parámetros desconocidos/repetidos/vacíos, body, UUID o formato de apuestas inválidos |
 | `404` | El usuario vendedor no existe |
 | `409` | Sorteo cerrado/sorteado, aún no iniciado o fuera del horario de apuestas |
 | `503` | Runtime o draw ausente, inválido o no disponible; UUID/TIR discordantes |
