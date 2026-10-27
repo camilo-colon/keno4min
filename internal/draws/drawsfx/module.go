@@ -1,4 +1,4 @@
-package draw
+package drawsfx
 
 import (
 	"github.com/cronos/keno4min/internal/draws/adapters/dynamodb"

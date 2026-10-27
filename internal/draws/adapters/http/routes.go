@@ -13,6 +13,6 @@ func NewRoutes(getRuntime *GetRuntimeHandler) *Routes {
 }
 
 func (r *Routes) Register(router fiber.Router) {
-	draw := router.Group("/draws")
-	draw.Get("/runtime", r.getRuntime.Handle)
+	group := router.Group("/draws")
+	group.Get("/runtime", r.getRuntime.Handle)
 }

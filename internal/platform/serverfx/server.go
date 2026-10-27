@@ -17,7 +17,6 @@ type Server struct {
 }
 
 func NewServer(cfg *config.Config) *Server {
-
 	app := fiber.New(fiber.Config{
 		AppName: cfg.AppName,
 	})

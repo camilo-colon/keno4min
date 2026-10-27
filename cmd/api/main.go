@@ -2,19 +2,27 @@ package main
 
 import (
 	"github.com/cronos/keno4min/internal/config"
-	draw "github.com/cronos/keno4min/internal/draws"
+	"github.com/cronos/keno4min/internal/draws/drawsfx"
 	"github.com/cronos/keno4min/internal/platform/awsfx"
 	dynamodbfx "github.com/cronos/keno4min/internal/platform/awsfx/dynamodbfx"
 	"github.com/cronos/keno4min/internal/platform/serverfx"
+	"github.com/cronos/keno4min/internal/tickets/ticketsfx"
+	"github.com/cronos/keno4min/internal/users/usersfx"
 	"go.uber.org/fx"
 )
 
 func main() {
-	fx.New(
+	fx.New(apiModule()).Run()
+}
+
+func apiModule() fx.Option {
+	return fx.Options(
 		fx.Provide(config.Load),
 		awsfx.Module,
 		dynamodbfx.Module,
-		draw.Module,
+		drawsfx.Module,
+		usersfx.RepositoryModule,
+		ticketsfx.Module,
 		serverfx.Module,
-	).Run()
+	)
 }

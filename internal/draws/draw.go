@@ -31,7 +31,7 @@ type Draw struct {
 	Status   Status
 	StartsAt time.Time
 	ClosesAt time.Time
-	Balls    []uint8
+	Balls    []int
 	VideoID  string
 }
 

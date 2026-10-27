@@ -9,10 +9,15 @@ import (
 	"go.uber.org/fx"
 )
 
+var RepositoryModule = fx.Module(
+	"users.repository",
+	fx.Provide(fx.Annotate(dynamodb.NewDynamodbRepository, fx.As(new(ports.Repository)))),
+)
+
 var WorkerModule = fx.Module(
 	"users.worker",
+	RepositoryModule,
 	fx.Provide(
-		fx.Annotate(dynamodb.NewDynamodbRepository, fx.As(new(ports.Repository))),
 		usecase.NewCreate,
 		fx.Annotate(
 			subscribers.NewUserCreatedSubscriber,

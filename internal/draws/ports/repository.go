@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 	"uuid"
+
+	"github.com/cronos/keno4min/internal/draws"
 )
 
 type Runtime struct {
@@ -21,10 +23,13 @@ type CurrentDraw struct {
 type LatestResult struct {
 	DrawId uuid.UUID
 	Tir    uint64
-	Balls  []int8
+	Balls  []int
 	Idv    string
 }
 
 type Repository interface {
+	GetCurrent(context.Context) (*draw.Draw, error)
+	FindByID(context.Context, uuid.UUID) (*draw.Draw, error)
 	GetRuntime(context.Context) (*Runtime, error)
+	GetLatestDraws(context.Context) ([]draw.Draw, error)
 }
