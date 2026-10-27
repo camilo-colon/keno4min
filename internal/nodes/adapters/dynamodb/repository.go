@@ -30,8 +30,8 @@ func NewDynamodbRepository(client *dynamodb.Client, cfg *config.Config) *Reposit
 }
 
 func (r Repository) FindById(ctx context.Context, id uuid.UUID) (*nodes.Node, error) {
-	id_str := id.String()
-	fmt.Println(id_str)
+	idStr := id.String()
+	fmt.Println(idStr)
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
