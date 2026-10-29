@@ -14,7 +14,9 @@ var Module = fx.Module(
 	fx.Provide(
 		fx.Annotate(dynamodb.NewDynamodbRepository, fx.As(new(ports.Repository))),
 		usecase.NewCreate,
+		usecase.NewList,
 		http.NewCreateTicketHandler,
+		http.NewListTicketsHandler,
 		fx.Annotate(
 			http.NewRoutes,
 			fx.As(new(serverfx.Route)),

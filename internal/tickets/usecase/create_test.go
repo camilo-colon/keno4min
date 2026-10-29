@@ -11,11 +11,13 @@ import (
 	draw "github.com/cronos/keno4min/internal/draws"
 	drawports "github.com/cronos/keno4min/internal/draws/ports"
 	"github.com/cronos/keno4min/internal/tickets"
+	"github.com/cronos/keno4min/internal/tickets/ports"
 	"github.com/cronos/keno4min/internal/users"
 	userports "github.com/cronos/keno4min/internal/users/ports"
 )
 
 type createRepository struct {
+	ports.Repository
 	generate func(context.Context) (string, error)
 	save     func(context.Context, *tickets.Ticket) error
 }

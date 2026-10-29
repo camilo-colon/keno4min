@@ -21,6 +21,7 @@ func NewServer(cfg *config.Config) *Server {
 	app := fiber.New(fiber.Config{
 		AppName:             cfg.AppName,
 		PassLocalsToContext: true,
+		StructValidator:     NewStructValidator(),
 	})
 
 	app.Use(requestid.New())

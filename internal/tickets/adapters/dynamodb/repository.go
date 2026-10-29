@@ -106,3 +106,51 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 	}
 	return nil
 }
+
+func (r Repository) ListByNode(ctx context.Context, params ports.ListParams) (ports.TicketPage, error) {
+	partition := "TICKETS#NODE#" + params.NodeID.String()
+
+	startKey, err := decodeCursor(params.Cursor)
+	if err != nil {
+		return ports.TicketPage{}, err
+	}
+	if startKey != nil {
+		// The cursor must resume the same node; otherwise it would leak another club's page.
+		value, ok := startKey["GSI2PK"].(*types.AttributeValueMemberS)
+		if !ok || value.Value != partition {
+			return ports.TicketPage{}, ports.ErrInvalidCursor
+		}
+	}
+
+	// BETWEEN includes both ends, so the exclusive upper bound becomes to-1ms.
+	result, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		IndexName:              aws.String("GSI2"),
+		KeyConditionExpression: aws.String("GSI2PK = :pk AND createdAt BETWEEN :from AND :to"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk":   &types.AttributeValueMemberS{Value: partition},
+			":from": &types.AttributeValueMemberN{Value: strconv.FormatInt(params.From.UnixMilli(), 10)},
+			":to":   &types.AttributeValueMemberN{Value: strconv.FormatInt(params.To.UnixMilli()-1, 10)},
+		},
+		ExclusiveStartKey: startKey,
+		Limit:             aws.Int32(params.Limit),
+	})
+	if err != nil {
+		return ports.TicketPage{}, fmt.Errorf("list tickets of node %s: %w", params.NodeID, err)
+	}
+
+	var items []ticketItem
+	if err := attributevalue.UnmarshalListOfMaps(result.Items, &items); err != nil {
+		return ports.TicketPage{}, fmt.Errorf("unmarshal tickets of node %s: %w", params.NodeID, err)
+	}
+	page := ports.TicketPage{Items: make([]*tickets.Ticket, len(items))}
+	for i, item := range items {
+		if page.Items[i], err = fromItem(item); err != nil {
+			return ports.TicketPage{}, err
+		}
+	}
+	if page.NextCursor, err = encodeCursor(result.LastEvaluatedKey); err != nil {
+		return ports.TicketPage{}, err
+	}
+	return page, nil
+}

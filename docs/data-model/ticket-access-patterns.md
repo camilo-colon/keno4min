@@ -1,8 +1,10 @@
 # Patrones de acceso de tiquetes
 
 Estado: creación HTTP conectada al caso de uso, lectura del TIR desde runtime,
-generación de cupones y guardado transaccional implementados. Las lecturas de
-tiquetes y la aceptación financiera siguen pendientes. La creación valida
+generación de cupones y guardado transaccional implementados. El listado por
+nodo y rango de creación (`AP-TICKET-05`) está implementado y expuesto en
+`GET /v1/tickets`. Las demás lecturas de tiquetes y la aceptación financiera
+siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y
 persiste la fecha como milisegundos Unix. El despliegue de los índices pertenece
@@ -188,12 +190,15 @@ deberá usar `LastEvaluatedKey` completo, incluidas las claves de la tabla, y no
 un cursor basado únicamente en la fecha.
 
 Las lecturas serán `Query` con condiciones sobre las claves, sin `Scan` ni
-filtros para resolver TIR, nodo o rango. Para el rango `[from, to)`, el contrato
-previsto recibe `time.Time` con precisión de milisegundos y exige `from < to`.
-El adaptador consultará `createdAt BETWEEN from.UnixMilli() AND
-to.UnixMilli()-1`, porque `BETWEEN` incluye ambos extremos. El futuro handler
-deberá exigir fechas RFC 3339 con zona y rechazar precisión inferior al
-milisegundo en los límites. El dominio continúa trabajando con `time.Time`.
+filtros para resolver TIR, nodo o rango. Para el rango `[from, to)`, el caso de
+uso `usecase.List` recibe `time.Time` con precisión de milisegundos, exige
+`from < to` y un límite entre 1 y 100 (50 por defecto). El adaptador consulta
+`createdAt BETWEEN from.UnixMilli() AND to.UnixMilli()-1`, porque `BETWEEN`
+incluye ambos extremos. El handler exige fechas RFC 3339 con zona y el caso de
+uso rechaza precisión inferior al milisegundo en los límites. El cursor es el
+`LastEvaluatedKey` completo en JSON codificado con base64 URL; el adaptador lo
+rechaza si no pertenece al mismo `GSI2PK`. El dominio continúa trabajando con
+`time.Time`.
 
 Ambos índices son eventualmente consistentes: un listado puede tardar en
 reflejar una venta o cambio de estado. El listado por TIR no define un acceso
