@@ -50,8 +50,8 @@ func (h *CreateTicketHandler) Handle(ctx fiber.Ctx) error {
 
 func parseCreateTicket(ctx fiber.Ctx) (usecase.CreateParams, error) {
 	query := ctx.RequestCtx().QueryArgs()
-	if query.Len() != 2 || !query.Has("stv") || !query.Has("sum") {
-		return usecase.CreateParams{}, errors.New("provide only stv and sum, exactly once each")
+	if len(query.PeekMulti("stv")) != 1 || len(query.PeekMulti("sum")) != 1 {
+		return usecase.CreateParams{}, errors.New("provide stv and sum exactly once each")
 	}
 	var request CreateTicketRequest
 	if err := ctx.Bind().Query(&request); err != nil {

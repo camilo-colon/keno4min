@@ -281,7 +281,8 @@ DynamoDB mediante los módulos Fx de la API.
 #### 7.3.3 Flujo de creación de la etapa actual
 
 1. **Validar la entrada.** Exigir `stv` y `sum` sin valores vacíos ni
-   parámetros repetidos o adicionales.
+   parámetros repetidos. Los parámetros adicionales, como `userId` o `nodeId`,
+   se ignoran: el vendedor y el club siempre se toman del token.
    Los límites técnicos de query y cantidad de apuestas quedan pendientes.
 2. **Identificar al vendedor.** Copiar `unique_name` del token a `CreatedBy` y
    `node_id` a `NodeID`. No guardar el UUID del usuario en el tiquete.
@@ -423,7 +424,7 @@ reservar el cupón. El JSON contiene `id`, `coupon` (texto con ceros iniciales),
 
 | HTTP | Situación |
 | --- | --- |
-| `400` | Query inválida, parámetros desconocidos/repetidos/vacíos, body o formato de apuestas inválidos |
+| `400` | Query inválida, parámetros repetidos/vacíos, body o formato de apuestas inválidos |
 | `401` | Token ausente, ilegible o sin los claims requeridos |
 | `409` | Sorteo cerrado/sorteado, aún no iniciado o fuera del horario de apuestas |
 | `503` | Runtime o draw ausente, inválido o no disponible; UUID/TIR discordantes |
@@ -686,7 +687,7 @@ creación están indicadas en la sección 7.3.3 y no se consideran implementadas
     timestamp o después queda fuera de la ventana de venta del sorteo.
 16. `GET /tickets` toma el vendedor del token y recibe las apuestas mediante
     `stv` y `sum`, sin body ni ID del tiquete en la query o como segmento de ruta;
-    parámetros adicionales o repetidos, grupos vacíos o
+    parámetros repetidos, grupos vacíos o
     cantidades diferentes se rechazan.
 17. Cada nuevo tiquete recibe un UUID v7 generado por el backend y un
     cupón con padding mínimo de 4 dígitos; solicitudes concurrentes no pueden aceptar

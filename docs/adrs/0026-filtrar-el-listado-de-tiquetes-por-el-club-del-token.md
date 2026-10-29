@@ -15,14 +15,14 @@ token ([ADR 0025](0025-tomar-club-y-vendedor-de-los-claims-del-token.md)).
 
 El handler del listado toma `Identity.NodeID` (claim `node_id`) mediante
 `auth.FromContext` y lo entrega en `ports.ListParams.NodeID`. La query admite
-`from`, `to`, `limit` y `cursor`; si incluye `nodeId`, se rechaza con `400`
-para que el cliente no asuma que filtra por otro club. Si la identidad no está
+`from`, `to`, `limit` y `cursor`; un `nodeId` enviado en la query se ignora.
+Si la identidad no está
 disponible, responde `401`. El caso de uso y el repositorio no cambian.
 
 ## Alternativas consideradas
 
-- Ignorar `nodeId` en la query: no rompe a los clientes actuales, pero oculta
-  que el filtro ya no se aplica.
+- Rechazar `nodeId` en la query con `400`: hace explícito que el filtro no se
+  aplica, pero obliga a los clientes a retirarlo sin aportar nada al resultado.
 - Aceptar `nodeId` y exigir que coincida con el token: conserva un parámetro
   sin información y no cubre jerarquías con varios clubes, que siguen fuera de
   esta etapa.
@@ -30,7 +30,7 @@ disponible, responde `401`. El caso de uso y el repositorio no cambian.
 ## Consecuencias
 
 - Cada usuario solo lista los tiquetes de su club.
-- Los clientes deben dejar de enviar `nodeId`.
+- Los clientes que sigan enviando `nodeId` no se ven afectados.
 - Aplica la condición del
   [ADR 0023](0023-delegar-la-validacion-del-token-al-api-gateway.md): la
   restricción depende de que la API solo sea accesible a través del API Gateway.

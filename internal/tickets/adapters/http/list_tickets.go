@@ -31,9 +31,6 @@ func (h *ListTicketsHandler) Handle(ctx fiber.Ctx) error {
 	if !ok {
 		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing or invalid bearer token"})
 	}
-	if ctx.RequestCtx().QueryArgs().Has("nodeId") {
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "nodeId is taken from the token"})
-	}
 	request := ListTicketsRequest{Limit: 50}
 	if err := ctx.Bind().Query(&request); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})

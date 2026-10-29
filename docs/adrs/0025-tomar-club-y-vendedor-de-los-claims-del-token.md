@@ -22,8 +22,9 @@ El handler de creación copia `Identity.NodeID` (claim `node_id`) y
 `users/ports` y ya no consulta al usuario ni devuelve `ErrUserNotFound`.
 `cmd/api` deja de cargar `usersfx.RepositoryModule`.
 
-Se mantienen las demás decisiones del ADR 0024: la query solo admite `stv` y
-`sum`, el backend genera el UUID v7 y el UUID del usuario no se persiste.
+Se mantienen las demás decisiones del ADR 0024: el backend genera el UUID v7
+y el UUID del usuario no se persiste. La query exige `stv` y `sum` una vez cada
+uno; los parámetros adicionales, como `userId` o `nodeId`, se ignoran.
 
 ## Alternativas consideradas
 
