@@ -2,14 +2,13 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"uuid"
 
 	"github.com/cronos/keno4min/internal/users"
 	"github.com/cronos/keno4min/internal/users/ports"
 )
 
-var ErrInvalidUser = errors.New("userId, username and nodeId are required")
+var ErrInvalidUser = users.ErrInvalidUser
 
 type Create struct {
 	repository ports.Repository
@@ -34,5 +33,9 @@ func (c *Create) Execute(ctx context.Context, params CreateParams) error {
 	if existing != nil {
 		return nil
 	}
-	return c.repository.Save(ctx, users.New(params.ID, params.Username, params.RoleId, params.NodeId))
+	user, err := users.New(params.ID, params.Username, params.RoleId, params.NodeId)
+	if err != nil {
+		return err
+	}
+	return c.repository.Save(ctx, user)
 }

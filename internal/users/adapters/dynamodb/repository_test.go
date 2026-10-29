@@ -35,7 +35,7 @@ func jsonResponse(status int, body string) *http.Response {
 }
 
 func TestUserStorageRoundTrip(t *testing.T) {
-	user := users.New(uuid.MustParse("afed5b77-1e8a-471f-9398-489784a1b897"), "cajero", 0, uuid.MustParse("f2a0dc45-9ab8-4553-bd7c-2d53b345a5f6"))
+	user := &users.User{ID: uuid.MustParse("afed5b77-1e8a-471f-9398-489784a1b897"), Username: "cajero", NodeId: uuid.MustParse("f2a0dc45-9ab8-4553-bd7c-2d53b345a5f6")}
 	wantItem := map[string]map[string]string{
 		"PK": {"S": "USER#" + user.ID.String()}, "SK": {"S": "META"}, "username": {"S": "cajero"},
 		"id": {"S": user.ID.String()}, "roleId": {"N": "0"}, "nodeId": {"S": user.NodeId.String()},
@@ -99,7 +99,7 @@ func TestSaveHandlesRedeliveryAndErrors(t *testing.T) {
 				calls++
 				return jsonResponse(http.StatusBadRequest, tc.body), nil
 			})
-			err := repo.Save(context.Background(), users.New(uuid.MustParse("afed5b77-1e8a-471f-9398-489784a1b897"), "cajero", 1, uuid.NewV7()))
+			err := repo.Save(context.Background(), &users.User{ID: uuid.MustParse("afed5b77-1e8a-471f-9398-489784a1b897"), Username: "cajero", RoleId: 1, NodeId: uuid.NewV7()})
 			if (err != nil) != tc.wantError || calls != 1 {
 				t.Fatalf("error=%v, calls=%d", err, calls)
 			}
@@ -135,7 +135,7 @@ func TestFindMissingOrInvalidUser(t *testing.T) {
 func TestRepositoryPreservesTransportErrors(t *testing.T) {
 	failure := errors.New("connection failed")
 	repo := newTestRepository(func(*http.Request) (*http.Response, error) { return nil, failure })
-	if err := repo.Save(context.Background(), users.New(uuid.MustParse("afed5b77-1e8a-471f-9398-489784a1b897"), "cajero", 1, uuid.NewV7())); !errors.Is(err, failure) {
+	if err := repo.Save(context.Background(), &users.User{ID: uuid.MustParse("afed5b77-1e8a-471f-9398-489784a1b897"), Username: "cajero", RoleId: 1, NodeId: uuid.NewV7()}); !errors.Is(err, failure) {
 		t.Fatal(err)
 	}
 	if _, err := repo.FindById(context.Background(), uuid.NewV7()); !errors.Is(err, failure) {
@@ -184,7 +184,7 @@ func TestFindByUsernameQueriesIndex(t *testing.T) {
 			if err != nil || (got != nil) != tc.wantUser || calls != 1 {
 				t.Fatalf("got %+v, %v, calls=%d", got, err, calls)
 			}
-			if tc.wantUser && !reflect.DeepEqual(got, users.New(id, "Cajero", 2, nodeID)) {
+			if tc.wantUser && !reflect.DeepEqual(got, &users.User{ID: id, Username: "Cajero", RoleId: 2, NodeId: nodeID}) {
 				t.Fatalf("wrong user: %+v", got)
 			}
 		})

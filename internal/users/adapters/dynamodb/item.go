@@ -38,5 +38,5 @@ func fromItem(item userItem) (*users.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse nodeId: %w", err)
 	}
-	return users.New(id, item.Username, item.RoleId, nodeID), nil
+	return users.New(id, item.Username, item.RoleId, nodeID)
 }
