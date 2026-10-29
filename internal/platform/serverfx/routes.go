@@ -12,17 +12,12 @@ type Route interface {
 type RouteParams struct {
 	fx.In
 
-	Server     *Server
-	Routes     []Route `group:"routes"`
-	RootRoutes []Route `group:"rootRoutes"`
+	Server *Server
+	Routes []Route `group:"routes"`
 }
 
 func RegisterRoutes(params RouteParams) {
-	for _, route := range params.RootRoutes {
-		route.Register(params.Server.app)
-	}
-	api := params.Server.app.Group("/v1")
 	for _, route := range params.Routes {
-		route.Register(api)
+		route.Register(params.Server.app)
 	}
 }
