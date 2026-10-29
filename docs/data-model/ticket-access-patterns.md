@@ -37,10 +37,10 @@ estructura.
 
 `CreatedBy` se copia de `user.Username` al crear el tiquete, conservando su
 escritura y mayúsculas. El servidor lo obtiene de la misma lectura del usuario
-por `userId`; no se recibe como parámetro independiente del frontend ni
+por el UUID del token; no se recibe como parámetro independiente del frontend ni
 requiere una lectura adicional. Es una copia histórica: un cambio posterior
 del username no modifica los tiquetes existentes. El tiquete no incluye campos
-`UserID` ni `Username`: `userId` se utiliza solo como entrada para consultar al
+`UserID` ni `Username`: el UUID del usuario se utiliza solo para consultar al
 usuario y no se persiste en el tiquete. `CreatedBy` contiene el nombre histórico
 del vendedor y se utiliza para presentación; no es su UUID.
 
@@ -230,7 +230,7 @@ soporte para texto. Las nuevas escrituras solo persisten el valor numérico.
 
 ## Lectura del vendedor y club
 
-La creación recibe `userId` y reutiliza `AP-USER-02`, una lectura fuerte por ID
+La creación toma el UUID del usuario del token y reutiliza `AP-USER-02`, una lectura fuerte por ID
 definida en el [modelo de usuarios](user-access-patterns.md). Si el usuario no
 existe, se rechaza la creación; los errores de lectura o deserialización se
 propagan. Se copia `User.Username` a `Ticket.CreatedBy` y `User.NodeId` a

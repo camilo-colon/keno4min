@@ -77,14 +77,15 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
   `ctx.Context()`. Los casos de uso reciben los valores que necesitan como
   parámetros y no dependen de este paquete. La autenticación pertenece al
   backoffice según el PRD; por eso este paquete vive en `platform` y no como un
-  módulo de negocio. El middleware aún no se monta en ninguna ruta. Consulta el
+  módulo de negocio. `serverfx` monta el middleware en todas las rutas. Consulta el
   [ADR 0023](adrs/0023-delegar-la-validacion-del-token-al-api-gateway.md).
 - Los adaptadores no se importan entre sí. Un adaptador puede implementar varios
   contratos pequeños; no se introduce un repositorio CRUD genérico.
 - `tickets` contiene `Ticket`, `Bet`, `Status` y el constructor `Create` con sus
   validaciones de dominio. Depende únicamente de la biblioteca estándar, sin
   importar HTTP ni persistencia.
-- `tickets/adapters/http` depende de Fiber, del caso de uso y del dominio.
+- `tickets/adapters/http` depende de Fiber, de `platform/auth`, del caso de uso
+  y del dominio.
   Interpreta la query y serializa el tiquete
   guardado con apuestas como arrays numéricos.
 - `tickets/ports` define `Repository.GenerateCoupon` y `Repository.Save`, y
@@ -229,11 +230,11 @@ El contrato HTTP y las reglas acordadas están en el
 [PRD, sección 7.3](product-requirements.md#73-creación).
 El [modelo de tiquetes](data-model/ticket-access-patterns.md) define el dominio
 `Ticket` y `Bet`, sus atributos persistidos, el contador global y la reserva
-exclusiva del cupón. El [ADR 0019](adrs/0019-generar-identificador-del-tiquete-en-el-backend.md)
-registra la decisión vigente: el backend genera el UUID v7 y el frontend envía
-`userId`; la creación consulta al usuario y conserva `user.NodeId` como club de la venta y
+exclusiva del cupón. El [ADR 0024](adrs/0024-tomar-el-vendedor-del-token-al-crear-tiquetes.md)
+registra la decisión vigente: el backend genera el UUID v7 y toma el vendedor
+del token; la creación consulta al usuario y conserva `user.NodeId` como club de la venta y
 `user.Username` en `CreatedBy` como nombre histórico del vendedor. El tiquete
-no conserva el UUID del usuario; `userId` se usa para consultarlo durante la
+no conserva el UUID del usuario; el UUID del token se usa para consultarlo durante la
 creación. El listado incluirá `createdBy` y TIR desde los datos del tiquete,
 evitando consultas por cada fila.
 
@@ -246,8 +247,8 @@ vacío; su formato corresponde a `Repository.GenerateCoupon`.
 El [flujo de la etapa actual](product-requirements.md#733-flujo-de-creación-de-la-etapa-actual)
 aplaza autenticación, permisos, comprobaciones del club e idempotencia.
 El saldo y su descuento siguen
-pendientes. El handler recibe `userId`, `stv` y `sum`, sin body, e invoca el caso
-de uso. Comprueba la estructura de la query, el UUID y la conversión de números
+pendientes. El handler toma el vendedor con `auth.FromContext`, recibe `stv` y
+`sum`, sin body, e invoca el caso de uso. Comprueba la estructura de la query y la conversión de números
 e importes antes de acceder a persistencia. Las reglas de las apuestas y el
 desbordamiento del total se validan al construir el tiquete. Todas sus respuestas usan
 `Cache-Control: no-store`. El manejo explícito de `HEAD` queda pendiente.

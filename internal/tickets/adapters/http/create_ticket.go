@@ -5,17 +5,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"uuid"
 
+	"github.com/cronos/keno4min/internal/platform/auth"
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/usecase"
 	"github.com/gofiber/fiber/v3"
 )
 
 type CreateTicketRequest struct {
-	UserID string `query:"userId"`
-	Stv    string `query:"stv"`
-	Sum    string `query:"sum"`
+	Stv string `query:"stv"`
+	Sum string `query:"sum"`
 }
 
 type CreateTicketHandler struct {
@@ -27,10 +26,15 @@ func NewCreateTicketHandler(useCase *usecase.Create) *CreateTicketHandler {
 }
 
 func (h *CreateTicketHandler) Handle(ctx fiber.Ctx) error {
+	identity, ok := auth.FromContext(ctx)
+	if !ok {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing or invalid bearer token"})
+	}
 	params, err := parseCreateTicket(ctx)
 	if err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+	params.UserID = identity.UserID
 	ticket, err := h.useCase.Execute(ctx, params)
 	if errors.Is(err, tickets.ErrBettingClosed) {
 		return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "draw is not accepting tickets"})
@@ -49,16 +53,12 @@ func (h *CreateTicketHandler) Handle(ctx fiber.Ctx) error {
 
 func parseCreateTicket(ctx fiber.Ctx) (usecase.CreateParams, error) {
 	query := ctx.RequestCtx().QueryArgs()
-	if query.Len() != 3 || !query.Has("userId") || !query.Has("stv") || !query.Has("sum") {
-		return usecase.CreateParams{}, errors.New("provide only userId, stv and sum, exactly once each")
+	if query.Len() != 2 || !query.Has("stv") || !query.Has("sum") {
+		return usecase.CreateParams{}, errors.New("provide only stv and sum, exactly once each")
 	}
 	var request CreateTicketRequest
 	if err := ctx.Bind().Query(&request); err != nil {
 		return usecase.CreateParams{}, err
-	}
-	userID, err := uuid.Parse(request.UserID)
-	if err != nil || userID == uuid.Nil() {
-		return usecase.CreateParams{}, errors.New("userId must be a non-zero UUID")
 	}
 	selections, values := strings.Split(request.Stv, "_"), strings.Split(request.Sum, "_")
 	if len(selections) != len(values) {
@@ -81,7 +81,7 @@ func parseCreateTicket(ctx fiber.Ctx) (usecase.CreateParams, error) {
 		}
 		bets[i].ValueCents = int64(value)
 	}
-	return usecase.CreateParams{UserID: userID, Bets: bets}, nil
+	return usecase.CreateParams{Bets: bets}, nil
 }
 
 type betResponse struct {

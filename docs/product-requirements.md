@@ -205,16 +205,15 @@ no da por resuelto el débito por el hecho de guardar el tiquete y su cupón.
 La creación se expone mediante `GET /tickets`, con las apuestas en la query
 de la URL y sin body. La ruta no lleva los prefijos `/v1/keno4min`, el segmento
 `create` ni un identificador del tiquete como segmento de ruta. El backend
-genera el UUID v7 del tiquete; el frontend envía `userId` para identificar al
-usuario vendedor, junto con las apuestas y sus valores.
+genera el UUID v7 del tiquete; el frontend envía solo las apuestas y sus
+valores. El usuario vendedor se toma del token autenticado (claim `sub`).
 
 ```http
-GET /tickets?userId=afed5b77-1e8a-471f-9398-489784a1b897&stv=1%3B2%3B3_10%3B20%3B30&sum=50000_25000
+GET /tickets?stv=1%3B2%3B3_10%3B20%3B30&sum=50000_25000
 ```
 
 | Parámetro obligatorio | Formato | Interpretación del ejemplo |
 | --- | --- | --- |
-| `userId` | UUID de un usuario existente | Usuario vendedor; su `NodeId` identifica al club |
 | `stv` | Números separados por `;`; apuestas separadas por `_` | Apuestas `[1, 2, 3]` y `[10, 20, 30]` |
 | `sum` | Valores enteros en la unidad monetaria mínima, separados por `_` | Valores `50000` y `25000`, respectivamente |
 
@@ -232,12 +231,11 @@ cajeros. El beneficio de rendimiento deberá medirse; no se considera demostrado
 por el transporte en la URL. La operación debe ejecutarse por una acción
 explícita de venta y sus respuestas deben usar `Cache-Control: no-store`.
 
-Por ahora el servidor consulta el usuario mediante `userId`, comprueba que
+El servidor consulta el usuario mediante el UUID del token, comprueba que
 exista y copia `user.NodeId` como club de la venta y `user.Username` como nombre
 del vendedor en `CreatedBy`. Ese nombre se obtiene de la misma consulta; el
-frontend no lo envía como parámetro adicional. `userId` es un dato de entrada
-para consultar al usuario y no se guarda en el tiquete. No identifica al vendedor
-desde una sesión autenticada ni realiza comprobaciones de permisos, actividad
+frontend no lo envía como parámetro adicional. El UUID del usuario se usa para
+consultarlo y no se guarda en el tiquete. No realiza comprobaciones de permisos, actividad
 o pertenencia del club en esta etapa. Tampoco necesita consultar el nodo para
 determinar esa asociación. El frontend no envía un `nodeId` independiente.
 
@@ -283,13 +281,12 @@ DynamoDB mediante los módulos Fx de la API.
 
 #### 7.3.3 Flujo de creación de la etapa actual
 
-1. **Validar la entrada.** Exigir `userId`, `stv` y `sum` sin valores
-   vacíos ni parámetros repetidos. Validar el UUID no nulo del usuario.
+1. **Validar la entrada.** Exigir `stv` y `sum` sin valores vacíos ni
+   parámetros repetidos o adicionales. Tomar el UUID del usuario del token.
    Los límites técnicos de query y cantidad de apuestas quedan pendientes.
-2. **Consultar el usuario.** Buscarlo por `userId`; si no existe, rechazar la
+2. **Consultar el usuario.** Buscarlo por el UUID del token; si no existe, rechazar la
    creación. Copiar `user.Username` a `CreatedBy` y `user.NodeId` a `NodeID`.
    No guardar el UUID del usuario en el tiquete.
-   La consulta no constituye autenticación.
 3. **Validar las apuestas y calcular el total.** Rechazar grupos o elementos
    vacíos y cantidades diferentes de selecciones y valores. Cada apuesta debe
    contener entre 1 y 10 números enteros de `1..80`, sin repetidos dentro de
@@ -320,7 +317,7 @@ consultar repositorios. El constructor conserva sus comprobaciones después de
 asignar el cupón; un rechazo posterior todavía puede dejar saltos permitidos.
 La coordinación financiera sigue pendiente.
 
-La autenticación y los permisos del vendedor, las comprobaciones de actividad y
+Los permisos del vendedor, las comprobaciones de actividad y
 pertenencia del club y el diseño de idempotencia quedan fuera de esta etapa. Su aplazamiento no elimina
 los requisitos funcionales finales del MVP.
 
@@ -691,9 +688,9 @@ creación están indicadas en la sección 7.3.3 y no se consideran implementadas
     `update_tickets` y no genera las `balls` antes de `closesAt`.
 15. Con `closesAt = startsAt + 157 segundos`, una operación recibida en ese
     timestamp o después queda fuera de la ventana de venta del sorteo.
-16. `GET /tickets` recibe el vendedor mediante `userId` y las apuestas mediante
+16. `GET /tickets` toma el vendedor del token y recibe las apuestas mediante
     `stv` y `sum`, sin body ni ID del tiquete en la query o como segmento de ruta;
-    UUID de usuario inválidos, parámetros repetidos, grupos vacíos o
+    parámetros adicionales o repetidos, grupos vacíos o
     cantidades diferentes se rechazan.
 17. Cada nuevo tiquete recibe un UUID v7 generado por el backend y un
     cupón con padding mínimo de 4 dígitos; solicitudes concurrentes no pueden aceptar

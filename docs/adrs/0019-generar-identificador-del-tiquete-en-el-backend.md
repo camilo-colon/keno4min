@@ -1,9 +1,10 @@
 # 0019. Generar el identificador del tiquete en el backend
 
-- Estado: Aceptada
+- Estado: Reemplazada
 - Fecha: 2026-10-24
 - Responsables: Equipo de cronos
 - Reemplaza: [ADR 0017](0017-conservar-vendedor-como-created-by.md)
+- Reemplazada por: [ADR 0024](0024-tomar-el-vendedor-del-token-al-crear-tiquetes.md)
 
 ## Contexto
 
