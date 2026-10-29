@@ -17,6 +17,7 @@ internal/
 ├── platform/aws/            # Configuración base del SDK AWS y módulo Fx
 ├── platform/dynamodb/       # Cliente DynamoDB y módulo Fx
 ├── platform/server/         # Servidor HTTP y middleware transversal
+├── platform/auth/           # Middleware Bearer: Identity del token, New y FromContext
 ├── platform/workerfx/       # Consumidores SQS, deserialización y ciclo de vida Fx
 ├── users/
 │   ├── user.go              # Réplica del usuario de backoffice
@@ -68,6 +69,16 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
   composición se mantiene fuera del dominio, como en `usersfx` y `nodesfx`,
   para que los puertos y adaptadores puedan importar `Draw` sin ciclos.
   Consulta el [ADR 0018](adrs/0018-separar-composicion-fx-del-dominio-draw.md).
+- `platform/auth` sigue el patrón de los middlewares de Fiber, como
+  `requestid`: `New` decodifica el JWT sin verificarlo, porque el API Gateway lo
+  valida, y guarda una `Identity` con `fiber.StoreInContext` bajo una clave
+  privada. Los handlers la leen con `auth.FromContext(ctx)`; gracias a
+  `PassLocalsToContext` en `serverfx`, también está disponible en
+  `ctx.Context()`. Los casos de uso reciben los valores que necesitan como
+  parámetros y no dependen de este paquete. La autenticación pertenece al
+  backoffice según el PRD; por eso este paquete vive en `platform` y no como un
+  módulo de negocio. El middleware aún no se monta en ninguna ruta. Consulta el
+  [ADR 0023](adrs/0023-delegar-la-validacion-del-token-al-api-gateway.md).
 - Los adaptadores no se importan entre sí. Un adaptador puede implementar varios
   contratos pequeños; no se introduce un repositorio CRUD genérico.
 - `tickets` contiene `Ticket`, `Bet`, `Status` y el constructor `Create` con sus

@@ -18,7 +18,8 @@ type Server struct {
 
 func NewServer(cfg *config.Config) *Server {
 	app := fiber.New(fiber.Config{
-		AppName: cfg.AppName,
+		AppName:             cfg.AppName,
+		PassLocalsToContext: true,
 	})
 
 	app.Use(requestid.New())
