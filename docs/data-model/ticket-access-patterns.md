@@ -270,7 +270,9 @@ bolas pertenecen al draw: no se copian al tiquete ni se persisten en su ítem.
 Un draw ausente para el TIR del tiquete es un error de integridad y responde
 `500`. Mientras el draw no esté sorteado, `balls` se responde como lista vacía.
 La respuesta tiene su propio tipo, separado del listado, y contiene los campos
-del listado más `balls`.
+del listado más `nodeId`, `bets` y `balls`. El listado omite `nodeId`, porque
+siempre coincide con el club del token, y `bets`; conserva `totalCents`,
+calculado a partir de las apuestas.
 
 ## Asignación del consecutivo
 

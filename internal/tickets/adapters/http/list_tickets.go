@@ -58,35 +58,22 @@ type listTicketsResponse struct {
 }
 
 type listTicketResponse struct {
-	ID         string                  `json:"id"`
-	Coupon     string                  `json:"coupon"`
-	NodeID     string                  `json:"nodeId"`
-	TIR        uint64                  `json:"tir"`
-	Bets       []listTicketBetResponse `json:"bets"`
-	TotalCents int64                   `json:"totalCents"`
-	Status     tickets.Status          `json:"status"`
-	PrizeCents int64                   `json:"prizeCents"`
-	CreatedBy  string                  `json:"createdBy"`
-	CreatedAt  time.Time               `json:"createdAt"`
-}
-
-type listTicketBetResponse struct {
-	Nums       []int `json:"nums"`
-	ValueCents int64 `json:"valueCents"`
+	ID         string         `json:"id"`
+	Coupon     string         `json:"coupon"`
+	TIR        uint64         `json:"tir"`
+	TotalCents int64          `json:"totalCents"`
+	Status     tickets.Status `json:"status"`
+	PrizeCents int64          `json:"prizeCents"`
+	CreatedBy  string         `json:"createdBy"`
+	CreatedAt  time.Time      `json:"createdAt"`
 }
 
 func toListTicketResponse(ticket *tickets.Ticket) listTicketResponse {
 	result := listTicketResponse{
-		ID: ticket.ID.String(), Coupon: ticket.Coupon, NodeID: ticket.NodeID.String(),
+		ID: ticket.ID.String(), Coupon: ticket.Coupon,
 		TIR: ticket.TIR, Status: ticket.Status, PrizeCents: ticket.PrizeCents, CreatedBy: ticket.CreatedBy, CreatedAt: ticket.CreatedAt,
-		Bets: make([]listTicketBetResponse, len(ticket.Bets)),
 	}
-	for i, bet := range ticket.Bets {
-		nums := make([]int, len(bet.Nums))
-		for j, num := range bet.Nums {
-			nums[j] = int(num)
-		}
-		result.Bets[i] = listTicketBetResponse{Nums: nums, ValueCents: bet.ValueCents}
+	for _, bet := range ticket.Bets {
 		result.TotalCents += bet.ValueCents
 	}
 	return result
