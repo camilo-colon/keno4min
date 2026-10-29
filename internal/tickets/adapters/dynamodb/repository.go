@@ -150,6 +150,7 @@ func (r Repository) ListByNode(ctx context.Context, params ports.ListParams) (po
 		},
 		ExclusiveStartKey: startKey,
 		Limit:             aws.Int32(params.Limit),
+		ScanIndexForward:  aws.Bool(false),
 	})
 	if err != nil {
 		return ports.TicketPage{}, fmt.Errorf("list tickets of node %s: %w", params.NodeID, err)

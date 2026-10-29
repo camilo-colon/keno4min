@@ -199,7 +199,8 @@ filtros para resolver TIR, nodo o rango. Para el rango `[from, to)`, el caso de
 uso `usecase.List` recibe `time.Time` con precisión de milisegundos, exige
 `from < to` y un límite entre 1 y 100 (50 por defecto). El adaptador consulta
 `GSI2SK BETWEEN from AND to-1ms`, ambos con el formato de `createdAt`, porque `BETWEEN`
-incluye ambos extremos. El handler exige fechas RFC 3339 con zona y el caso de
+incluye ambos extremos, con `ScanIndexForward=false` para devolver primero los
+tiquetes más recientes. El handler exige fechas RFC 3339 con zona y el caso de
 uso rechaza precisión inferior al milisegundo en los límites. El cursor es el
 `LastEvaluatedKey` completo en JSON codificado con base64 URL; el adaptador
 no comprueba que pertenezca al mismo `GSI2PK`. El dominio continúa trabajando con
