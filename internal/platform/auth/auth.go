@@ -9,8 +9,6 @@ import (
 
 type Role string
 
-const RoleCashier Role = "CASHIER"
-
 type Identity struct {
 	UserID   uuid.UUID
 	Username string
