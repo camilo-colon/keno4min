@@ -31,5 +31,7 @@ type Repository interface {
 	GenerateCoupon(context.Context) (string, error)
 	Save(context.Context, *tickets.Ticket) error
 	GetByID(context.Context, uuid.UUID) (*tickets.Ticket, error)
+	// GetByIDs omits missing tickets and does not preserve the order of ids.
+	GetByIDs(context.Context, []uuid.UUID) ([]*tickets.Ticket, error)
 	ListByNode(context.Context, ListParams) (TicketPage, error)
 }

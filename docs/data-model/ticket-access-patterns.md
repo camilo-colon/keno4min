@@ -6,7 +6,8 @@ nodo y rango de creación (`AP-TICKET-05`) está implementado y expuesto en
 `GET /tickets`; el nodo se toma del claim `node_id` del token y un `nodeId`
 en la query se ignora ([ADR 0026](../adrs/0026-filtrar-el-listado-de-tiquetes-por-el-club-del-token.md)). La consulta por ID
 (`AP-TICKET-06`) está expuesta en `GET /tickets/:id` e incluye las bolas
-copiadas al tiquete por la liquidación. Las demás lecturas de tiquetes y la aceptación financiera
+copiadas al tiquete por la liquidación. La consulta por lote de IDs
+(`AP-TICKET-07`) está expuesta en `POST /tickets/lookup`. Las demás lecturas de tiquetes y la aceptación financiera
 siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y
@@ -237,7 +238,8 @@ lectura o condición sobre el draw al guardar. Consulta el
 `AP-TICKET-01` está implementado por `Repository.GenerateCoupon` y
 `AP-TICKET-02` por `Repository.Save`, incluyendo los atributos de los índices.
 `AP-TICKET-05` está implementado por `Repository.ListByNode` y `AP-TICKET-06`
-por `Repository.GetByID`. `AP-TICKET-03` y `AP-TICKET-04` describen lecturas
+por `Repository.GetByID`. `AP-TICKET-07` está implementado por
+`Repository.GetByIDs`. `AP-TICKET-03` y `AP-TICKET-04` describen lecturas
 previstas que todavía no están implementadas.
 
 | ID | Operación | Acceso | Condición o consistencia |
@@ -248,6 +250,7 @@ previstas que todavía no están implementadas.
 | `AP-TICKET-04` | Listar tiquetes por TIR | `Query` en `GSI1`, `GSI1PK = TICKETS#TIR#<tir>` | Eventual; paginar hasta agotar resultados |
 | `AP-TICKET-05` | Listar tiquetes por nodo y rango de creación | `Query` en `GSI2`, `GSI2PK = TICKETS#NODE#<nodeId>` y rango sobre `GSI2SK` | Eventual; rango `[from, to)` y cursor completo |
 | `AP-TICKET-06` | Obtener un tiquete por ID | `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte |
+| `AP-TICKET-07` | Obtener varios tiquetes por ID | `BatchGetItem` en `TICKET#<ticketId>` / `META`, hasta 50 llaves | Lectura fuerte; error si quedan `UnprocessedKeys` |
 
 `AP-TICKET-03` es un acceso interno previsto, no un endpoint de consulta ya
 definido. Conocer el cupón no sustituye la autorización del cajero.
@@ -277,6 +280,27 @@ La respuesta tiene su propio tipo, separado del listado, y contiene los campos
 del listado más `nodeId`, `bets` y `balls`. El listado omite `nodeId`, porque
 siempre coincide con el club del token, y `bets`; conserva `totalCents`,
 calculado a partir de las apuestas.
+
+## Consulta por lote
+
+`POST /tickets/lookup` recibe `{"ids": [...]}` y toma el club del claim
+`node_id` del token. Permite a los clientes actualizar el estado y el premio de
+los tiquetes que ya muestran. Un body inválido o un ID que no es UUID responde `400`.
+
+El [caso de uso `tickets/usecase.Lookup`](../../internal/tickets/usecase/lookup.go)
+descarta los IDs repetidos y exige entre 1 y 50 IDs distintos; fuera de ese
+rango devuelve `ErrInvalidLookupParams` y el handler responde `400`. Los
+tiquetes inexistentes y los de otro club se omiten de la respuesta, sin
+distinguirlos, para no revelar que el ID existe.
+
+`Repository.GetByIDs` implementa `AP-TICKET-07` con una única llamada
+`BatchGetItem` y lectura fuerte. No conserva el orden de los IDs. Si DynamoDB
+devuelve `UnprocessedKeys`, el método falla en lugar de responder sin esos
+tiquetes, porque el cliente los interpretaría como inexistentes; no reintenta y
+el handler responde `500`. Con 50 llaves la respuesta no alcanza el límite de
+16 MB, por lo que esa condición solo se espera ante limitación de capacidad.
+
+La respuesta es `{"items": [{"id", "status", "prizeCents"}]}`.
 
 ## Asignación del consecutivo
 

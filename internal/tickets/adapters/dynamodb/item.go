@@ -6,6 +6,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/cronos/keno4min/internal/tickets"
 )
 
@@ -44,6 +45,13 @@ type couponItem struct {
 	PK       string `dynamodbav:"PK"`
 	SK       string `dynamodbav:"SK"`
 	TicketID string `dynamodbav:"ticketId"`
+}
+
+func ticketKey(id uuid.UUID) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"PK": &types.AttributeValueMemberS{Value: "TICKET#" + id.String()},
+		"SK": &types.AttributeValueMemberS{Value: "META"},
+	}
 }
 
 func toItem(ticket *tickets.Ticket) ticketItem {

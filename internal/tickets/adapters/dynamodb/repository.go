@@ -111,11 +111,8 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 
 func (r Repository) GetByID(ctx context.Context, id uuid.UUID) (*tickets.Ticket, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: "TICKET#" + id.String()},
-			"SK": &types.AttributeValueMemberS{Value: "META"},
-		},
+		TableName:      aws.String(r.tableName),
+		Key:            ticketKey(id),
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
@@ -130,6 +127,43 @@ func (r Repository) GetByID(ctx context.Context, id uuid.UUID) (*tickets.Ticket,
 		return nil, fmt.Errorf("unmarshal ticket %s: %w", id, err)
 	}
 	return fromItem(item)
+}
+
+func (r Repository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*tickets.Ticket, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]map[string]types.AttributeValue, len(ids))
+	for i, id := range ids {
+		keys[i] = ticketKey(id)
+	}
+	output, err := r.client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+		RequestItems: map[string]types.KeysAndAttributes{
+			r.tableName: {Keys: keys, ConsistentRead: aws.Bool(true)},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("batch get tickets: %w", err)
+	}
+	// Failing is safer than answering without some tickets; the client can retry.
+	if len(output.UnprocessedKeys) > 0 {
+		return nil, errors.New("batch get tickets: some keys were not processed")
+	}
+
+	var items []ticketItem
+	if err := attributevalue.UnmarshalListOfMaps(output.Responses[r.tableName], &items); err != nil {
+		return nil, fmt.Errorf("unmarshal tickets: %w", err)
+	}
+	result := make([]*tickets.Ticket, len(items))
+	for i, item := range items {
+		ticket, err := fromItem(item)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = ticket
+	}
+	return result, nil
 }
 
 func (r Repository) ListByNode(ctx context.Context, params ports.ListParams) (ports.TicketPage, error) {
