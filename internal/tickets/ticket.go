@@ -33,6 +33,7 @@ type Ticket struct {
 	Bets       []Bet
 	Status     Status
 	PrizeCents int64
+	Balls      []uint8
 	CreatedBy  string
 	CreatedAt  time.Time
 }

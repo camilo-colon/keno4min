@@ -53,8 +53,8 @@ instantánea atómica ni consultan el histórico.
 con el TIR decimal sin padding, obtiene el UUID del draw del atributo `id` y reutiliza
 `FindByID` para leer el draw canónico. Ambas lecturas son fuertes. Devuelve
 `nil` si no existe la búsqueda por TIR o el draw referenciado, y un error si el
-draw leído tiene un TIR distinto del solicitado. `tickets/usecase.Get` lo usa
-para responder las bolas del draw de un tiquete.
+draw leído tiene un TIR distinto del solicitado. Actualmente ningún caso de uso
+lo consume.
 
 | ID | Patrón | Destino | Operación | Clave o condición | Orden | Consistencia |
 | --- | --- | --- | --- | --- | --- | --- |

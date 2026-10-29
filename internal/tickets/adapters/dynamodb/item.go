@@ -23,6 +23,7 @@ type ticketItem struct {
 	Bets       []betItem `dynamodbav:"bets"`
 	Status     string    `dynamodbav:"status"`
 	PrizeCents int64     `dynamodbav:"prizeCents"`
+	Balls      []uint    `dynamodbav:"balls,omitempty"`
 	CreatedBy  string    `dynamodbav:"createdBy"`
 	CreatedAt  string    `dynamodbav:"createdAt"`
 }
@@ -70,6 +71,7 @@ func toItem(ticket *tickets.Ticket) ticketItem {
 		Bets:       bets,
 		Status:     string(ticket.Status),
 		PrizeCents: ticket.PrizeCents,
+		Balls:      toBallItems(ticket.Balls),
 		CreatedBy:  ticket.CreatedBy,
 		CreatedAt:  createdAt,
 	}
@@ -107,7 +109,28 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 		Bets:       bets,
 		Status:     tickets.Status(item.Status),
 		PrizeCents: item.PrizeCents,
+		Balls:      fromBallItems(item.Balls),
 		CreatedBy:  item.CreatedBy,
 		CreatedAt:  createdAt.UTC(),
 	}, nil
+}
+
+// toBallItems uses []uint so balls are stored as a List of Number, not as the binary of []uint8.
+func toBallItems(balls []uint8) []uint {
+	if len(balls) == 0 {
+		return nil
+	}
+	result := make([]uint, len(balls))
+	for i, ball := range balls {
+		result[i] = uint(ball)
+	}
+	return result
+}
+
+func fromBallItems(balls []uint) []uint8 {
+	result := make([]uint8, len(balls))
+	for i, ball := range balls {
+		result[i] = uint8(ball)
+	}
+	return result
 }

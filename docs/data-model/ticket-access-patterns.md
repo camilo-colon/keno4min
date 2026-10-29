@@ -5,8 +5,8 @@ generación de cupones y guardado transaccional implementados. El listado por
 nodo y rango de creación (`AP-TICKET-05`) está implementado y expuesto en
 `GET /tickets`; el nodo se toma del claim `node_id` del token y un `nodeId`
 en la query se ignora ([ADR 0026](../adrs/0026-filtrar-el-listado-de-tiquetes-por-el-club-del-token.md)). La consulta por ID
-(`AP-TICKET-06`) está expuesta en `GET /tickets/:id` e incluye las bolas del
-draw del tiquete. Las demás lecturas de tiquetes y la aceptación financiera
+(`AP-TICKET-06`) está expuesta en `GET /tickets/:id` e incluye las bolas
+copiadas al tiquete por la liquidación. Las demás lecturas de tiquetes y la aceptación financiera
 siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y
@@ -126,6 +126,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | `Bets` | `bets` | List de Map; cada mapa contiene `nums` (List de Number) y `valueCents` (Number) |
 | `Status` | `status` | String, valor del estado del dominio |
 | `PrizeCents` | `prizeCents` | Number, premio normal del tiquete en centavos; `0` mientras no esté liquidado o si no tiene premio |
+| `Balls` | `balls` | List de Number, bolas del draw escritas por la liquidación; ausente mientras el tiquete no esté liquidado |
 | `CreatedAt` | `createdAt` | String, UTC con formato `2006-01-02T15:04:05.000Z07:00` |
 
 Los UUID se almacenan en su representación canónica con guiones. El adaptador
@@ -262,15 +263,15 @@ tiquete recién vendido sea visible de inmediato. Si el ítem no existe devuelve
 El [caso de uso `tickets/usecase.Get`](../../internal/tickets/usecase/get.go)
 compara `Ticket.NodeID` con el club del token. Un tiquete de otro club devuelve
 `ErrTicketNotFound`, igual que uno inexistente, y el handler responde `404` en
-ambos casos para no revelar que el ID existe. Después consulta
-`draws/ports.Repository.FindByTIR` (`AP-DRAW-02`) con el TIR almacenado en el
-tiquete y devuelve `TicketDetail` con el tiquete y las bolas del draw. Las
-bolas pertenecen al draw: no se copian al tiquete ni se persisten en su ítem.
+ambos casos para no revelar que el ID existe. La consulta es una sola lectura:
+no consulta el draw.
 
-Un draw ausente para el TIR del tiquete es un error de integridad y responde
-`500`. `balls` solo se responde cuando el
-draw tiene estado `drawn`; en otro estado se responde como lista vacía, aunque
-el draw ya tenga bolas guardadas, para no revelar el resultado durante la venta.
+`balls` sale del atributo `balls` del tiquete. La liquidación lo escribe junto
+con `status` y `prizeCents`; Keno4min no lo escribe al crear el tiquete, por lo
+que la respuesta es una lista vacía hasta que el tiquete se liquida. Como solo
+se copia al liquidar, el resultado no se expone mientras la venta sigue abierta.
+El adaptador guarda `balls` como List de Number mediante `[]uint` y lo omite si
+está vacío. La lectura no vuelve a validar las bolas.
 La respuesta tiene su propio tipo, separado del listado, y contiene los campos
 del listado más `nodeId`, `bets` y `balls`. El listado omite `nodeId`, porque
 siempre coincide con el club del token, y `bets`; conserva `totalCents`,

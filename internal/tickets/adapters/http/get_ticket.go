@@ -29,14 +29,14 @@ func (h *GetTicketHandler) Handle(ctx fiber.Ctx) error {
 	if err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ticket id must be a valid UUID"})
 	}
-	detail, err := h.useCase.Execute(ctx, usecase.GetParams{TicketID: ticketID, NodeID: identity.NodeID})
+	ticket, err := h.useCase.Execute(ctx, usecase.GetParams{TicketID: ticketID, NodeID: identity.NodeID})
 	if errors.Is(err, ports.ErrTicketNotFound) {
 		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "ticket not found"})
 	}
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "could not get ticket"})
 	}
-	return ctx.JSON(toGetTicketResponse(detail))
+	return ctx.JSON(toGetTicketResponse(ticket))
 }
 
 type getTicketResponse struct {
@@ -58,13 +58,15 @@ type getTicketBetResponse struct {
 	ValueCents int64 `json:"valueCents"`
 }
 
-func toGetTicketResponse(detail *usecase.TicketDetail) getTicketResponse {
-	ticket := detail.Ticket
+func toGetTicketResponse(ticket *tickets.Ticket) getTicketResponse {
 	result := getTicketResponse{
 		ID: ticket.ID.String(), Coupon: ticket.Coupon, NodeID: ticket.NodeID.String(),
 		TIR: ticket.TIR, Status: ticket.Status, PrizeCents: ticket.PrizeCents, CreatedBy: ticket.CreatedBy, CreatedAt: ticket.CreatedAt,
 		Bets:  make([]getTicketBetResponse, len(ticket.Bets)),
-		Balls: append([]int{}, detail.Balls...),
+		Balls: make([]int, len(ticket.Balls)),
+	}
+	for i, ball := range ticket.Balls {
+		result.Balls[i] = int(ball)
 	}
 	for i, bet := range ticket.Bets {
 		nums := make([]int, len(bet.Nums))

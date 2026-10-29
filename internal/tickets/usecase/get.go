@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"uuid"
 
-	drawdomain "github.com/cronos/keno4min/internal/draws"
-	drawports "github.com/cronos/keno4min/internal/draws/ports"
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/ports"
 )
 
 type Get struct {
 	repository ports.Repository
-	draws      drawports.Repository
 }
 
-func NewGet(repository ports.Repository, draws drawports.Repository) *Get {
-	return &Get{repository: repository, draws: draws}
+func NewGet(repository ports.Repository) *Get {
+	return &Get{repository: repository}
 }
 
 type GetParams struct {
@@ -25,13 +22,7 @@ type GetParams struct {
 	NodeID   uuid.UUID
 }
 
-// TicketDetail is a ticket with the balls of its draw; Balls is empty until the draw status is drawn.
-type TicketDetail struct {
-	Ticket *tickets.Ticket
-	Balls  []int
-}
-
-func (g *Get) Execute(ctx context.Context, params GetParams) (*TicketDetail, error) {
+func (g *Get) Execute(ctx context.Context, params GetParams) (*tickets.Ticket, error) {
 	ticket, err := g.repository.GetByID(ctx, params.TicketID)
 	if err != nil {
 		return nil, err
@@ -40,18 +31,5 @@ func (g *Get) Execute(ctx context.Context, params GetParams) (*TicketDetail, err
 	if ticket.NodeID != params.NodeID {
 		return nil, fmt.Errorf("%w: %s", ports.ErrTicketNotFound, params.TicketID)
 	}
-
-	draw, err := g.draws.FindByTIR(ctx, ticket.TIR)
-	if err != nil {
-		return nil, err
-	}
-	if draw == nil {
-		return nil, fmt.Errorf("draw with tir %d of ticket %s not found", ticket.TIR, ticket.ID)
-	}
-	// Balls may be stored before the draw is played; expose them only once it is drawn.
-	balls := []int{}
-	if draw.Status == drawdomain.StatusDrawn {
-		balls = draw.Balls
-	}
-	return &TicketDetail{Ticket: ticket, Balls: balls}, nil
+	return ticket, nil
 }
