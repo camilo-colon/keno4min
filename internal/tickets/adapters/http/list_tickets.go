@@ -3,8 +3,8 @@ package http
 import (
 	"errors"
 	"time"
-	"uuid"
 
+	"github.com/cronos/keno4min/internal/platform/auth"
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/ports"
 	"github.com/cronos/keno4min/internal/tickets/usecase"
@@ -12,7 +12,6 @@ import (
 )
 
 type ListTicketsRequest struct {
-	NodeID uuid.UUID `query:"nodeId" validate:"required"`
 	From   time.Time `query:"from" validate:"required"`
 	To     time.Time `query:"to" validate:"required"`
 	Limit  int32     `query:"limit" validate:"min=1,max=100"`
@@ -28,12 +27,19 @@ func NewListTicketsHandler(useCase *usecase.List) *ListTicketsHandler {
 }
 
 func (h *ListTicketsHandler) Handle(ctx fiber.Ctx) error {
+	identity, ok := auth.FromContext(ctx)
+	if !ok {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing or invalid bearer token"})
+	}
+	if ctx.RequestCtx().QueryArgs().Has("nodeId") {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "nodeId is taken from the token"})
+	}
 	request := ListTicketsRequest{Limit: 50}
 	if err := ctx.Bind().Query(&request); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 	page, err := h.useCase.Execute(ctx, ports.ListParams{
-		NodeID: request.NodeID, From: request.From, To: request.To,
+		NodeID: identity.NodeID, From: request.From, To: request.To,
 		Limit: request.Limit, Cursor: request.Cursor,
 	})
 	if errors.Is(err, usecase.ErrInvalidListParams) || errors.Is(err, ports.ErrInvalidCursor) {

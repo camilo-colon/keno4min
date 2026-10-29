@@ -3,7 +3,8 @@
 Estado: creación HTTP conectada al caso de uso, lectura del TIR desde runtime,
 generación de cupones y guardado transaccional implementados. El listado por
 nodo y rango de creación (`AP-TICKET-05`) está implementado y expuesto en
-`GET /v1/tickets`. Las demás lecturas de tiquetes y la aceptación financiera
+`GET /v1/tickets`; el nodo se toma del claim `node_id` del token
+([ADR 0026](../adrs/0026-filtrar-el-listado-de-tiquetes-por-el-club-del-token.md)). Las demás lecturas de tiquetes y la aceptación financiera
 siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y

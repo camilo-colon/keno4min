@@ -86,7 +86,7 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
   importar HTTP ni persistencia.
 - `tickets/adapters/http` depende de Fiber, de `platform/auth`, del caso de uso
   y del dominio.
-  Interpreta la query y serializa el tiquete
+  Toma el club y el vendedor de `auth.Identity`, interpreta la query y serializa el tiquete
   guardado con apuestas como arrays numéricos.
 - `tickets/ports` define `Repository.GenerateCoupon` y `Repository.Save`, y
   depende del dominio `tickets` y `context`. `tickets/adapters/dynamodb`
