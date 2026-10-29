@@ -30,6 +30,7 @@ type LatestResult struct {
 type Repository interface {
 	GetCurrent(context.Context) (*draw.Draw, error)
 	FindByID(context.Context, uuid.UUID) (*draw.Draw, error)
+	FindByTIR(context.Context, uint64) (*draw.Draw, error)
 	GetRuntime(context.Context) (*Runtime, error)
 	GetLatestDraws(context.Context) ([]draw.Draw, error)
 }

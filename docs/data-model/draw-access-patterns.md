@@ -49,7 +49,12 @@ que no coincida con runtime. Devuelve `nil` si ese draw no existe. El estado y
 horario se evalúan por el consumidor mediante `Draw.AcceptsTicketsAt`.
 Las dos lecturas son fuertes y mantienen el mismo contexto; no son una
 instantánea atómica ni consultan el histórico.
-`AP-DRAW-02` conserva únicamente su diseño previsto.
+`AP-DRAW-02` está implementado por `FindByTIR`: lee `DRAW_TIR#<tir>`/`META`,
+con el TIR decimal sin padding, obtiene el atributo `drawId` y reutiliza
+`FindByID` para leer el draw canónico. Ambas lecturas son fuertes. Devuelve
+`nil` si no existe la búsqueda por TIR o el draw referenciado, y un error si el
+draw leído tiene un TIR distinto del solicitado. `tickets/usecase.Get` lo usa
+para responder las bolas del draw de un tiquete.
 
 | ID | Patrón | Destino | Operación | Clave o condición | Orden | Consistencia |
 | --- | --- | --- | --- | --- | --- | --- |

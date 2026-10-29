@@ -3,6 +3,7 @@ package dynamodb
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -59,6 +60,40 @@ func (r *DynamodbRepository) FindByID(ctx context.Context, id uuid.UUID) (*draw.
 		return nil, err
 	}
 	return &result, nil
+}
+
+// FindByTIR resolves the drawId from DRAW_TIR#<tir> and then reads the canonical draw.
+func (r *DynamodbRepository) FindByTIR(ctx context.Context, tir uint64) (*draw.Draw, error) {
+	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "DRAW_TIR#" + strconv.FormatUint(tir, 10)},
+			"SK": &types.AttributeValueMemberS{Value: "META"},
+		},
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find draw by tir %d: %w", tir, err)
+	}
+	if len(output.Item) == 0 {
+		return nil, nil
+	}
+	var item tirLookupItem
+	if err := attributevalue.UnmarshalMap(output.Item, &item); err != nil {
+		return nil, fmt.Errorf("unmarshal draw lookup of tir %d: %w", tir, err)
+	}
+	id, err := uuid.Parse(item.DrawID)
+	if err != nil {
+		return nil, fmt.Errorf("decode draw ID of tir %d: %w", tir, err)
+	}
+	result, err := r.FindByID(ctx, id)
+	if err != nil || result == nil {
+		return result, err
+	}
+	if result.TIR != tir {
+		return nil, fmt.Errorf("draw %s has tir %d, expected %d", id, result.TIR, tir)
+	}
+	return result, nil
 }
 
 // GetLatestDraws returns up to ten results in descending GSI1SK order.

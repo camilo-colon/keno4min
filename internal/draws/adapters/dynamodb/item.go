@@ -30,6 +30,11 @@ type latestResultItem struct {
 	VideoID string `dynamodbav:"videoId"`
 }
 
+// tirLookupItem is the DRAW_TIR#<tir>/META item that points to the canonical draw.
+type tirLookupItem struct {
+	DrawID string `dynamodbav:"drawId"`
+}
+
 type drawItem struct {
 	ID       string      `dynamodbav:"id"`
 	Balls    []int       `dynamodbav:"balls"`

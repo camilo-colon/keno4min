@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -106,6 +107,29 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 		return fmt.Errorf("save ticket %s: %w", ticket.ID, err)
 	}
 	return nil
+}
+
+func (r Repository) GetByID(ctx context.Context, id uuid.UUID) (*tickets.Ticket, error) {
+	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "TICKET#" + id.String()},
+			"SK": &types.AttributeValueMemberS{Value: "META"},
+		},
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get ticket %s: %w", id, err)
+	}
+	if len(output.Item) == 0 {
+		return nil, fmt.Errorf("%w: %s", ports.ErrTicketNotFound, id)
+	}
+
+	var item ticketItem
+	if err := attributevalue.UnmarshalMap(output.Item, &item); err != nil {
+		return nil, fmt.Errorf("unmarshal ticket %s: %w", id, err)
+	}
+	return fromItem(item)
 }
 
 func (r Repository) ListByNode(ctx context.Context, params ports.ListParams) (ports.TicketPage, error) {
