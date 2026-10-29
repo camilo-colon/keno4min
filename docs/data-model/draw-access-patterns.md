@@ -10,7 +10,7 @@ presentación del juego. No requiere operaciones `Scan`.
 | --- | --- | --- | --- | --- | --- |
 | Draw no sorteado | `DRAW#<drawId>` | `META` | No existe | No existe | Draw completo; es la fuente de verdad |
 | Draw sorteado | `DRAW#<drawId>` | `META` | `DRAW#DRAWN` | `TIR#<tir20>` | Draw completo; es la fuente de verdad |
-| Búsqueda por TIR | `DRAW_TIR#<tir>` | `META` | No existe | No existe | Solo `drawId` |
+| Búsqueda por TIR | `DRAW_TIR#<tir>` | `META` | No existe | No existe | Solo `id`, el UUID del draw |
 | Estado de presentación | `DRAW_RUNTIME` | `META` | No existe | No existe | `current` y `latestResult` |
 
 `tir20` es el TIR decimal completado a 20 dígitos con ceros a la izquierda. Por
@@ -50,7 +50,7 @@ horario se evalúan por el consumidor mediante `Draw.AcceptsTicketsAt`.
 Las dos lecturas son fuertes y mantienen el mismo contexto; no son una
 instantánea atómica ni consultan el histórico.
 `AP-DRAW-02` está implementado por `FindByTIR`: lee `DRAW_TIR#<tir>`/`META`,
-con el TIR decimal sin padding, obtiene el atributo `drawId` y reutiliza
+con el TIR decimal sin padding, obtiene el UUID del draw del atributo `id` y reutiliza
 `FindByID` para leer el draw canónico. Ambas lecturas son fuertes. Devuelve
 `nil` si no existe la búsqueda por TIR o el draw referenciado, y un error si el
 draw leído tiene un TIR distinto del solicitado. `tickets/usecase.Get` lo usa

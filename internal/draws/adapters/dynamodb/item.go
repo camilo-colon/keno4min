@@ -32,7 +32,7 @@ type latestResultItem struct {
 
 // tirLookupItem is the DRAW_TIR#<tir>/META item that points to the canonical draw.
 type tirLookupItem struct {
-	DrawID string `dynamodbav:"drawId"`
+	DrawID string `dynamodbav:"id"`
 }
 
 type drawItem struct {

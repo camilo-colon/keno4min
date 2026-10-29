@@ -268,7 +268,9 @@ tiquete y devuelve `TicketDetail` con el tiquete y las bolas del draw. Las
 bolas pertenecen al draw: no se copian al tiquete ni se persisten en su ítem.
 
 Un draw ausente para el TIR del tiquete es un error de integridad y responde
-`500`. Mientras el draw no esté sorteado, `balls` se responde como lista vacía.
+`500`. `balls` solo se responde cuando el
+draw tiene estado `drawn`; en otro estado se responde como lista vacía, aunque
+el draw ya tenga bolas guardadas, para no revelar el resultado durante la venta.
 La respuesta tiene su propio tipo, separado del listado, y contiene los campos
 del listado más `nodeId`, `bets` y `balls`. El listado omite `nodeId`, porque
 siempre coincide con el club del token, y `bets`; conserva `totalCents`,

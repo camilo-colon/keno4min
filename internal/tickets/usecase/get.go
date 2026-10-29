@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"uuid"
 
+	drawdomain "github.com/cronos/keno4min/internal/draws"
 	drawports "github.com/cronos/keno4min/internal/draws/ports"
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/ports"
@@ -24,7 +25,7 @@ type GetParams struct {
 	NodeID   uuid.UUID
 }
 
-// TicketDetail is a ticket with the balls of its draw; Balls is empty until the draw is drawn.
+// TicketDetail is a ticket with the balls of its draw; Balls is empty until the draw status is drawn.
 type TicketDetail struct {
 	Ticket *tickets.Ticket
 	Balls  []int
@@ -47,5 +48,10 @@ func (g *Get) Execute(ctx context.Context, params GetParams) (*TicketDetail, err
 	if draw == nil {
 		return nil, fmt.Errorf("draw with tir %d of ticket %s not found", ticket.TIR, ticket.ID)
 	}
-	return &TicketDetail{Ticket: ticket, Balls: draw.Balls}, nil
+	// Balls may be stored before the draw is played; expose them only once it is drawn.
+	balls := []int{}
+	if draw.Status == drawdomain.StatusDrawn {
+		balls = draw.Balls
+	}
+	return &TicketDetail{Ticket: ticket, Balls: balls}, nil
 }
