@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cronos/keno4min/internal/config"
+	"github.com/cronos/keno4min/internal/platform/auth"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
@@ -24,6 +25,7 @@ func NewServer(cfg *config.Config) *Server {
 
 	app.Use(requestid.New())
 	app.Use(recover.New(recover.Config{EnableStackTrace: cfg.IsDevelopment()}))
+	app.Use(auth.New())
 
 	return &Server{app: app, cfg: cfg}
 }
