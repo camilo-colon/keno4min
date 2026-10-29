@@ -1,6 +1,6 @@
 # 0022. Indexar tiquetes y persistir la fecha en milisegundos
 
-- Estado: Aceptada
+- Estado: Reemplazada por [ADR 0027](0027-ordenar-gsi2-por-gsi2sk-con-fecha-iso.md)
 - Fecha: 2026-10-27
 - Responsables: Equipo de cronos
 

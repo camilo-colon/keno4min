@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-	"uuid"
 
 	"github.com/cronos/keno4min/internal/tickets/ports"
 )
@@ -21,9 +20,6 @@ func NewList(repository ports.Repository) *List {
 }
 
 func (l *List) Execute(ctx context.Context, params ports.ListParams) (ports.TicketPage, error) {
-	if params.NodeID == uuid.Nil() {
-		return ports.TicketPage{}, fmt.Errorf("%w: nodeId must be a non-zero UUID", ErrInvalidListParams)
-	}
 	if params.From.IsZero() || params.To.IsZero() || !params.From.Before(params.To) {
 		return ports.TicketPage{}, fmt.Errorf("%w: from must be before to", ErrInvalidListParams)
 	}

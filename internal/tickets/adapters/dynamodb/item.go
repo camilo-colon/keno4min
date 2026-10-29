@@ -10,19 +10,28 @@ import (
 )
 
 type ticketItem struct {
-	PK        string    `dynamodbav:"PK"`
-	SK        string    `dynamodbav:"SK"`
-	GSI1PK    string    `dynamodbav:"GSI1PK"`
-	GSI1SK    string    `dynamodbav:"GSI1SK"`
-	GSI2PK    string    `dynamodbav:"GSI2PK"`
-	TicketID  string    `dynamodbav:"ticketId"`
-	Coupon    string    `dynamodbav:"coupon"`
-	NodeID    string    `dynamodbav:"nodeId"`
-	TIR       uint64    `dynamodbav:"tir"`
-	Bets      []betItem `dynamodbav:"bets"`
-	Status    string    `dynamodbav:"status"`
-	CreatedBy string    `dynamodbav:"createdBy"`
-	CreatedAt int64     `dynamodbav:"createdAt"`
+	PK         string    `dynamodbav:"PK"`
+	SK         string    `dynamodbav:"SK"`
+	GSI1PK     string    `dynamodbav:"GSI1PK"`
+	GSI1SK     string    `dynamodbav:"GSI1SK"`
+	GSI2PK     string    `dynamodbav:"GSI2PK"`
+	GSI2SK     string    `dynamodbav:"GSI2SK"`
+	TicketID   string    `dynamodbav:"ticketId"`
+	Coupon     string    `dynamodbav:"coupon"`
+	NodeID     string    `dynamodbav:"nodeId"`
+	TIR        uint64    `dynamodbav:"tir"`
+	Bets       []betItem `dynamodbav:"bets"`
+	Status     string    `dynamodbav:"status"`
+	PrizeCents int64     `dynamodbav:"prizeCents"`
+	CreatedBy  string    `dynamodbav:"createdBy"`
+	CreatedAt  string    `dynamodbav:"createdAt"`
+}
+
+// createdAtLayout fixes the millisecond width so lexical order matches chronological order.
+const createdAtLayout = "2006-01-02T15:04:05.000Z07:00"
+
+func formatCreatedAt(t time.Time) string {
+	return t.UTC().Format(createdAtLayout)
 }
 
 type betItem struct {
@@ -46,20 +55,23 @@ func toItem(ticket *tickets.Ticket) ticketItem {
 		bets[i] = betItem{Nums: nums, ValueCents: bet.ValueCents}
 	}
 
+	createdAt := formatCreatedAt(ticket.CreatedAt)
 	return ticketItem{
-		PK:        "TICKET#" + ticket.ID.String(),
-		SK:        "META",
-		GSI1PK:    "TICKETS#TIR#" + strconv.FormatUint(ticket.TIR, 10),
-		GSI1SK:    "TICKET#" + ticket.ID.String(),
-		GSI2PK:    "TICKETS#NODE#" + ticket.NodeID.String(),
-		TicketID:  ticket.ID.String(),
-		Coupon:    ticket.Coupon,
-		NodeID:    ticket.NodeID.String(),
-		TIR:       ticket.TIR,
-		Bets:      bets,
-		Status:    string(ticket.Status),
-		CreatedBy: ticket.CreatedBy,
-		CreatedAt: ticket.CreatedAt.UnixMilli(),
+		PK:         "TICKET#" + ticket.ID.String(),
+		SK:         "META",
+		GSI1PK:     "TICKETS#TIR#" + strconv.FormatUint(ticket.TIR, 10),
+		GSI1SK:     "TICKET#" + ticket.ID.String(),
+		GSI2PK:     "TICKETS#NODE#" + ticket.NodeID.String(),
+		GSI2SK:     createdAt,
+		TicketID:   ticket.ID.String(),
+		Coupon:     ticket.Coupon,
+		NodeID:     ticket.NodeID.String(),
+		TIR:        ticket.TIR,
+		Bets:       bets,
+		Status:     string(ticket.Status),
+		PrizeCents: ticket.PrizeCents,
+		CreatedBy:  ticket.CreatedBy,
+		CreatedAt:  createdAt,
 	}
 }
 
@@ -82,14 +94,20 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 		bets[i] = tickets.Bet{Nums: nums, ValueCents: bet.ValueCents}
 	}
 
+	createdAt, err := time.Parse(time.RFC3339Nano, item.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("decode creation date of ticket %s: %w", id, err)
+	}
+
 	return &tickets.Ticket{
-		ID:        id,
-		Coupon:    item.Coupon,
-		NodeID:    nodeID,
-		TIR:       item.TIR,
-		Bets:      bets,
-		Status:    tickets.Status(item.Status),
-		CreatedBy: item.CreatedBy,
-		CreatedAt: time.UnixMilli(item.CreatedAt).UTC(),
+		ID:         id,
+		Coupon:     item.Coupon,
+		NodeID:     nodeID,
+		TIR:        item.TIR,
+		Bets:       bets,
+		Status:     tickets.Status(item.Status),
+		PrizeCents: item.PrizeCents,
+		CreatedBy:  item.CreatedBy,
+		CreatedAt:  createdAt.UTC(),
 	}, nil
 }

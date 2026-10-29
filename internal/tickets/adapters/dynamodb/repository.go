@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -114,23 +115,14 @@ func (r Repository) ListByNode(ctx context.Context, params ports.ListParams) (po
 	if err != nil {
 		return ports.TicketPage{}, err
 	}
-	if startKey != nil {
-		// The cursor must resume the same node; otherwise it would leak another club's page.
-		value, ok := startKey["GSI2PK"].(*types.AttributeValueMemberS)
-		if !ok || value.Value != partition {
-			return ports.TicketPage{}, ports.ErrInvalidCursor
-		}
-	}
-
-	// BETWEEN includes both ends, so the exclusive upper bound becomes to-1ms.
 	result, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.tableName),
 		IndexName:              aws.String("GSI2"),
-		KeyConditionExpression: aws.String("GSI2PK = :pk AND createdAt BETWEEN :from AND :to"),
+		KeyConditionExpression: aws.String("GSI2PK = :pk AND GSI2SK BETWEEN :from AND :to"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk":   &types.AttributeValueMemberS{Value: partition},
-			":from": &types.AttributeValueMemberN{Value: strconv.FormatInt(params.From.UnixMilli(), 10)},
-			":to":   &types.AttributeValueMemberN{Value: strconv.FormatInt(params.To.UnixMilli()-1, 10)},
+			":from": &types.AttributeValueMemberS{Value: formatCreatedAt(params.From)},
+			":to":   &types.AttributeValueMemberS{Value: formatCreatedAt(params.To.Add(-time.Millisecond))},
 		},
 		ExclusiveStartKey: startKey,
 		Limit:             aws.Int32(params.Limit),

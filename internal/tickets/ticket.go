@@ -26,14 +26,15 @@ const (
 )
 
 type Ticket struct {
-	ID        uuid.UUID
-	Coupon    string
-	NodeID    uuid.UUID
-	TIR       uint64
-	Bets      []Bet
-	Status    Status
-	CreatedBy string
-	CreatedAt time.Time
+	ID         uuid.UUID
+	Coupon     string
+	NodeID     uuid.UUID
+	TIR        uint64
+	Bets       []Bet
+	Status     Status
+	PrizeCents int64
+	CreatedBy  string
+	CreatedAt  time.Time
 }
 
 func Create(id uuid.UUID, coupon string, nodeID uuid.UUID, tir uint64, bets []Bet, createdBy string) (*Ticket, error) {
@@ -68,6 +69,9 @@ func (t Ticket) validate() error {
 	}
 	if t.Coupon == "" {
 		return errors.New("coupon is required")
+	}
+	if t.PrizeCents < 0 {
+		return errors.New("prize must not be negative")
 	}
 	return validateBets(t.Bets)
 }

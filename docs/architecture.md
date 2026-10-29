@@ -291,12 +291,12 @@ tras una cancelación. El mapeo convierte los números de cada apuesta a una
 lista numérica sin modificar la entidad.
 
 El adaptador conserva `CreatedAt` como `time.Time` en el dominio y persiste
-`createdAt` como Number mediante `UnixMilli()`. El mismo ítem incluye las
-claves del listado por TIR en `GSI1` y por nodo y fecha en `GSI2`, cuyo sort key
-es `createdAt`. El despliegue de esos índices pertenece al repositorio central
-de infraestructura; las consultas todavía no están implementadas. Consulta el
+`createdAt` como String en UTC con milisegundos de ancho fijo. El mismo ítem
+incluye las claves del listado por TIR en `GSI1` y por nodo y fecha en `GSI2`,
+cuyo sort key es `GSI2SK`, con el mismo valor que `createdAt`. El despliegue de
+esos índices pertenece al repositorio central de infraestructura. Consulta el
 [modelo de tiquetes](data-model/ticket-access-patterns.md#índices-de-consulta) y el
-[ADR 0022](adrs/0022-indexar-tiquetes-y-persistir-fecha-en-milisegundos.md).
+[ADR 0027](adrs/0027-ordenar-gsi2-por-gsi2sk-con-fecha-iso.md).
 
 El repositorio recibe el cliente DynamoDB compartido y `config.Config` mediante
 `NewDynamodbRepository`. `ticketsfx.Module` lo registra y conecta al handler
