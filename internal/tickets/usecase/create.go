@@ -9,38 +9,27 @@ import (
 	drawports "github.com/cronos/keno4min/internal/draws/ports"
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/ports"
-	userports "github.com/cronos/keno4min/internal/users/ports"
 )
 
-var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrDrawUnavailable = errors.New("current draw is unavailable")
-)
+var ErrDrawUnavailable = errors.New("current draw is unavailable")
 
 type Create struct {
 	repository ports.Repository
-	users      userports.Repository
 	draws      drawports.Repository
 	now        func() time.Time
 }
 
-func NewCreate(repository ports.Repository, users userports.Repository, draws drawports.Repository) *Create {
-	return &Create{repository: repository, users: users, draws: draws, now: time.Now}
+func NewCreate(repository ports.Repository, draws drawports.Repository) *Create {
+	return &Create{repository: repository, draws: draws, now: time.Now}
 }
 
 type CreateParams struct {
-	UserID uuid.UUID
-	Bets   []tickets.Bet
+	NodeID    uuid.UUID
+	CreatedBy string
+	Bets      []tickets.Bet
 }
 
 func (c *Create) Execute(ctx context.Context, params CreateParams) (*tickets.Ticket, error) {
-	user, err := c.users.FindById(ctx, params.UserID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
 	draw, err := c.draws.GetCurrent(ctx)
 	if err != nil || draw == nil {
 		return nil, ErrDrawUnavailable
@@ -53,7 +42,7 @@ func (c *Create) Execute(ctx context.Context, params CreateParams) (*tickets.Tic
 		return nil, err
 	}
 
-	ticket, err := tickets.Create(uuid.NewV7(), coupon, user.NodeId, draw.TIR, params.Bets, user.Username)
+	ticket, err := tickets.Create(uuid.NewV7(), coupon, params.NodeID, draw.TIR, params.Bets, params.CreatedBy)
 	if err != nil {
 		return nil, err
 	}

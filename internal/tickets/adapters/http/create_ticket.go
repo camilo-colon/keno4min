@@ -34,13 +34,10 @@ func (h *CreateTicketHandler) Handle(ctx fiber.Ctx) error {
 	if err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	params.UserID = identity.UserID
+	params.NodeID, params.CreatedBy = identity.NodeID, identity.Username
 	ticket, err := h.useCase.Execute(ctx, params)
 	if errors.Is(err, tickets.ErrBettingClosed) {
 		return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "draw is not accepting tickets"})
-	}
-	if errors.Is(err, usecase.ErrUserNotFound) {
-		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 	if errors.Is(err, usecase.ErrDrawUnavailable) {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "current draw is unavailable"})

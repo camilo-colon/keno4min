@@ -30,18 +30,16 @@ de uso. `ticketsfx.Module` conecta el flujo y registra `GET /tickets` en la
 raíz. El contrato HTTP y su respuesta se definen en el PRD, sección 7.3.8.
 
 `ID` es el UUID v7 generado por el backend. `NodeID` representa al club y se
-copia de `user.NodeId`; no se vuelve a resolver desde el usuario en consultas futuras.
+copia del claim `node_id` del token; no se vuelve a resolver en consultas futuras.
 Así se conserva el club de la venta si el usuario cambia de nodo. No se
 introducen campos adicionales `CashierID`, `ClubID` o `AdminID` en esta
 estructura.
 
-`CreatedBy` se copia de `user.Username` al crear el tiquete, conservando su
-escritura y mayúsculas. El servidor lo obtiene de la misma lectura del usuario
-por el UUID del token; no se recibe como parámetro independiente del frontend ni
-requiere una lectura adicional. Es una copia histórica: un cambio posterior
+`CreatedBy` se copia del claim `unique_name` del token al crear el tiquete,
+conservando su escritura y mayúsculas; no se recibe como parámetro
+independiente del frontend ni requiere una lectura. Es una copia histórica: un cambio posterior
 del username no modifica los tiquetes existentes. El tiquete no incluye campos
-`UserID` ni `Username`: el UUID del usuario se utiliza solo para consultar al
-usuario y no se persiste en el tiquete. `CreatedBy` contiene el nombre histórico
+`UserID` ni `Username`: el UUID del usuario no se persiste en el tiquete. `CreatedBy` contiene el nombre histórico
 del vendedor y se utiliza para presentación; no es su UUID.
 
 `TIR` asocia el tiquete al número de tiro global y único del sorteo, con el
@@ -119,7 +117,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | --- | --- | --- |
 | `ID` | `ticketId` | String, UUID con guiones |
 | `Coupon` | `coupon` | String numérico con padding mínimo de 4 dígitos |
-| `CreatedBy` | `createdBy` | String, copia de `User.Username` en el momento de creación |
+| `CreatedBy` | `createdBy` | String, copia del claim `unique_name` del token en el momento de creación |
 | `NodeID` | `nodeId` | String, UUID con guiones del club |
 | `TIR` | `tir` | Number, entero positivo `uint64`, copiado del draw asociado |
 | `Bets` | `bets` | List de Map; cada mapa contiene `nums` (List de Number) y `valueCents` (Number) |
@@ -230,21 +228,15 @@ soporte para texto. Las nuevas escrituras solo persisten el valor numérico.
 
 ## Lectura del vendedor y club
 
-La creación toma el UUID del usuario del token y reutiliza `AP-USER-02`, una lectura fuerte por ID
-definida en el [modelo de usuarios](user-access-patterns.md). Si el usuario no
-existe, se rechaza la creación; los errores de lectura o deserialización se
-propagan. Se copia `User.Username` a `Ticket.CreatedBy` y `User.NodeId` a
-`Ticket.NodeID`. El UUID del usuario consultado no se almacena en el tiquete.
-No se usa una búsqueda por username ni una consulta al nodo para determinar
-el club. Las comprobaciones de autenticación, permisos, actividad y pertenencia
-del club están aplazadas en esta etapa.
+La creación no lee la réplica de usuarios. Copia el claim `unique_name` del
+token a `Ticket.CreatedBy` y `node_id` a `Ticket.NodeID`. El UUID del usuario no
+se almacena en el tiquete. No se consulta el nodo para determinar el club. Las
+comprobaciones de permisos, actividad y pertenencia del club están aplazadas en
+esta etapa.
 
 El [caso de uso `tickets/usecase.Create`](../../internal/tickets/usecase/create.go)
-recibe `UserID` y `Bets`. Usa el puerto existente `users/ports.Repository`
-para `FindById`, sin consultar por username ni modificar al usuario. Un `UserID`
-nulo se rechaza antes de la lectura; un usuario ausente devuelve
-`ErrUserNotFound`, sin generar cupón ni guardar. Los errores de lectura se propagan.
-Después consulta `draws/ports.Repository.GetCurrent`, que encapsula
+recibe `NodeID`, `CreatedBy` y `Bets`, sin depender de `users/ports`.
+Consulta `draws/ports.Repository.GetCurrent`, que encapsula
 `AP-DRAW-04` para resolver `Current.DrawId` y `AP-DRAW-01` para leer el draw
 canónico. Usa su TIR y `Draw.AcceptsTicketsAt`, sin histórico ni GSI.
 Un rechazo devuelve `ErrBettingClosed` (`409`) antes del cupón. Un error de
@@ -333,7 +325,7 @@ expone `GenerateCoupon(context.Context) (string, error)` y
 recibe el cliente compartido y `config.Config` mediante
 `NewDynamodbRepository`, y utiliza `cfg.Dynamodb.TableName`.
 
-Después de consultar el usuario y el TIR actual, asignar el consecutivo y construir el tiquete
+Después de consultar el TIR actual, asignar el consecutivo y construir el tiquete
 con las validaciones del dominio,
 `AP-TICKET-02` guarda el tiquete canónico y la reserva en una misma transacción.
 Ambos `Put` exigen que su clave no exista. Se guardan ambos registros o ninguno;
@@ -362,8 +354,8 @@ termina con éxito. El handler responde `500` ante errores de persistencia, sin 
 El repositorio está conectado a Fx y al handler HTTP mediante `ticketsfx.Module`.
 `GenerateCoupon` asigna el consecutivo y devuelve el cupón formateado;
 `Save` recibe ese cupón ya asignado. `tickets/usecase.Create` coordina ambos
-métodos: consulta al usuario y el TIR actual, genera el cupón y el UUID v7, llama a `tickets.Create` con
-`user.NodeId` y `user.Username`, y guarda el resultado. El constructor valida
+métodos: consulta el TIR actual, genera el cupón y el UUID v7, llama a `tickets.Create` con
+el club y el username del token, y guarda el resultado. El constructor valida
 las apuestas mediante `validateBets`, además de sus comprobaciones restantes.
 Un rechazo posterior al incremento
 puede dejar un salto permitido. No se recupera ni decrementa el

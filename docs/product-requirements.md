@@ -145,8 +145,8 @@ tiquetes.
 Cada tiquete:
 
 - tiene un UUID v7 generado por el backend al crear el tiquete;
-- registra el club mediante `NodeID`, copiado de `user.NodeId`;
-- conserva `CreatedBy`, una copia de `user.Username` al crear la venta para mostrar al vendedor en el listado; no guarda `UserID` ni un campo separado `Username`;
+- registra el club mediante `NodeID`, copiado del claim `node_id` del token;
+- conserva `CreatedBy`, una copia del claim `unique_name` del token al crear la venta para mostrar al vendedor en el listado; no guarda `UserID` ni un campo separado `Username`;
 - pertenece a un único sorteo, cuyo TIR se toma de `DRAW_RUNTIME.current.tir` durante la creación actual;
 - se asocia al sorteo mediante su `TIR` global y único, que se muestra como número de tiro en el listado de tiquetes;
 - contiene una o más apuestas;
@@ -231,11 +231,10 @@ cajeros. El beneficio de rendimiento deberá medirse; no se considera demostrado
 por el transporte en la URL. La operación debe ejecutarse por una acción
 explícita de venta y sus respuestas deben usar `Cache-Control: no-store`.
 
-El servidor consulta el usuario mediante el UUID del token, comprueba que
-exista y copia `user.NodeId` como club de la venta y `user.Username` como nombre
-del vendedor en `CreatedBy`. Ese nombre se obtiene de la misma consulta; el
-frontend no lo envía como parámetro adicional. El UUID del usuario se usa para
-consultarlo y no se guarda en el tiquete. No realiza comprobaciones de permisos, actividad
+El servidor toma del token el claim `node_id` como club de la venta y
+`unique_name` como nombre del vendedor en `CreatedBy`, sin consultar la réplica
+de usuarios. El frontend no los envía como parámetros adicionales. El UUID del
+usuario no se guarda en el tiquete. No realiza comprobaciones de permisos, actividad
 o pertenencia del club en esta etapa. Tampoco necesita consultar el nodo para
 determinar esa asociación. El frontend no envía un `nodeId` independiente.
 
@@ -282,11 +281,10 @@ DynamoDB mediante los módulos Fx de la API.
 #### 7.3.3 Flujo de creación de la etapa actual
 
 1. **Validar la entrada.** Exigir `stv` y `sum` sin valores vacíos ni
-   parámetros repetidos o adicionales. Tomar el UUID del usuario del token.
+   parámetros repetidos o adicionales.
    Los límites técnicos de query y cantidad de apuestas quedan pendientes.
-2. **Consultar el usuario.** Buscarlo por el UUID del token; si no existe, rechazar la
-   creación. Copiar `user.Username` a `CreatedBy` y `user.NodeId` a `NodeID`.
-   No guardar el UUID del usuario en el tiquete.
+2. **Identificar al vendedor.** Copiar `unique_name` del token a `CreatedBy` y
+   `node_id` a `NodeID`. No guardar el UUID del usuario en el tiquete.
 3. **Validar las apuestas y calcular el total.** Rechazar grupos o elementos
    vacíos y cantidades diferentes de selecciones y valores. Cada apuesta debe
    contener entre 1 y 10 números enteros de `1..80`, sin repetidos dentro de
@@ -304,8 +302,8 @@ DynamoDB mediante los módulos Fx de la API.
    fuera de `startsAt <= ahora < closesAt`, rechazar con `409`, sin consumir
    cupón ni guardar. Después incrementar el contador global y formar el cupón
    según la sección 7.3.2.
-6. **Construir y guardar.** Generar el UUID v7 del tiquete y usar el club obtenido
-   del usuario, `CreatedBy` copiado de su username, las apuestas validadas,
+6. **Construir y guardar.** Generar el UUID v7 del tiquete y usar el club y
+   `CreatedBy` obtenidos del token, las apuestas validadas,
    el total calculado y el cupón asignado.
    El servidor fija `CreatedAt` en UTC y el estado inicial `pending`. Guardar
    el tiquete y su reserva en una misma transacción, sin sobrescribir un UUID
@@ -341,8 +339,8 @@ estado inicial `pending` y la hora UTC del servidor.
 El constructor solo exige la presencia del cupón. `Repository.GenerateCoupon`
 garantiza el rango y aplica el padding mínimo de 4 dígitos; el caso de uso lo
 invoca antes de construir el tiquete. El caso de uso genera el UUID v7 del
-tiquete; el parseo de la URL y del UUID del usuario corresponden a la entrada.
-La existencia del usuario, los límites monetarios
+tiquete; el parseo de la URL corresponde a la entrada.
+Los límites monetarios
 por club, el saldo y las reservas en persistencia no se comprueban desde el
 constructor. Las comprobaciones aplazadas de la sección 7.3.3 siguen pendientes.
 
@@ -374,18 +372,16 @@ saltos y límites conservan las reglas de la sección 7.3.2.
 
 #### 7.3.7 Caso de uso de creación implementado
 
-`tickets/usecase.Create.Execute` recibe el UUID del usuario y las apuestas ya
-interpretadas. Consulta `draws.Repository.GetCurrent` después de encontrar al
-usuario y toma el TIR del draw canónico; el frontend no envía ese número.
+`tickets/usecase.Create.Execute` recibe el club (`NodeID`), el nombre del
+vendedor (`CreatedBy`) y las apuestas ya interpretadas. Consulta
+`draws.Repository.GetCurrent` y toma el TIR del draw canónico; el frontend no envía ese número.
 El repositorio resuelve el UUID desde runtime y lee el draw. Un error de
 lectura, un runtime/draw ausente o datos inválidos impiden generar el cupón y guardar.
 Antes del contador, `Draw.AcceptsTicketsAt` verifica el estado y el horario.
 
-Rechaza un UUID de usuario nulo y lo consulta por `FindById` usando el puerto
-existente de usuarios. Si no existe, devuelve `ErrUserNotFound` sin generar
-cupón ni guardar. Obtiene el cupón mediante `GenerateCoupon`, genera el UUID v7
-con `uuid.NewV7()` y construye el tiquete con `tickets.Create`, copiando
-`user.NodeId` a `NodeID` y `user.Username` a `CreatedBy`. El constructor mantiene las validaciones de
+No consulta la réplica de usuarios. Obtiene el cupón mediante `GenerateCoupon`,
+genera el UUID v7 con `uuid.NewV7()` y construye el tiquete con `tickets.Create`
+usando `NodeID` y `CreatedBy` recibidos. El constructor mantiene las validaciones de
 dominio. Si lo acepta, ejecuta `Save` y devuelve el tiquete guardado.
 
 Todos los errores se propagan y detienen el flujo; un fallo de `Save` no
@@ -396,7 +392,7 @@ Un rechazo posterior puede consumir un consecutivo sin guardarlo, conforme a
 los saltos permitidos. No se duplican las reglas ni se reutiliza ese consecutivo.
 
 `ticketsfx.Module` registra repositorio, caso de uso y handler. `cmd/api`
-incorpora ese módulo y el repositorio compartido de usuarios. La ruta se
+incorpora ese módulo sin el repositorio de usuarios. La ruta se
 registra en la raíz; el runtime conserva `/v1/draws/runtime`. El saldo y las
 comprobaciones aplazadas conservan el alcance pendiente ya definido.
 
@@ -427,15 +423,15 @@ reservar el cupón. El JSON contiene `id`, `coupon` (texto con ceros iniciales),
 
 | HTTP | Situación |
 | --- | --- |
-| `400` | Query inválida, parámetros desconocidos/repetidos/vacíos, body, UUID o formato de apuestas inválidos |
-| `404` | El usuario vendedor no existe |
+| `400` | Query inválida, parámetros desconocidos/repetidos/vacíos, body o formato de apuestas inválidos |
+| `401` | Token ausente, ilegible o sin los claims requeridos |
 | `409` | Sorteo cerrado/sorteado, aún no iniciado o fuera del horario de apuestas |
 | `503` | Runtime o draw ausente, inválido o no disponible; UUID/TIR discordantes |
-| `500` | Error al consultar el usuario, generar el cupón, construir o guardar el tiquete |
+| `500` | Error al generar el cupón, construir o guardar el tiquete |
 
 El manejo explícito de peticiones `HEAD` queda pendiente para una etapa posterior.
 
-Los errores de entrada, usuario y runtime retornan JSON con `error`; los
+Los errores de entrada, token y runtime retornan JSON con `error`; los
 internos usan un mensaje genérico. El handler agrega `Cache-Control: no-store`
 tanto a errores como a respuestas exitosas. No reintenta automáticamente una
 venta fallida ni devuelve éxito ante errores de persistencia.
@@ -444,8 +440,8 @@ Los límites técnicos configurables de cantidad de apuestas y longitud de query
 quedan pendientes. El servidor usa el buffer predeterminado de Fiber.
 Los límites de cliente y proxy deben coordinarse en cada despliegue.
 
-El entorno requiere la tabla configurada por `DYNAMODB_TABLE`, un usuario
-replicado, `DRAW_RUNTIME` con `current.id` UUID y `current.tir` positivo y el
+El entorno requiere la tabla configurada por `DYNAMODB_TABLE`, un token con
+los claims requeridos, `DRAW_RUNTIME` con `current.id` UUID y `current.tir` positivo y el
 draw canónico correspondiente y el contador `COUNTER#TICKET`/`META`
 inicializado según el modelo de tiquetes.
 La API necesita permisos de lectura, incremento del contador y escritura
@@ -701,8 +697,8 @@ creación están indicadas en la sección 7.3.3 y no se consideran implementadas
 19. Se aceptan huecos en la secuencia. Superar `9999` conserva los dígitos
     adicionales sin reiniciar la secuencia. Alcanzar el máximo acordado del
     contador impide asignar otro cupón sin reiniciar ni reciclar números.
-20. El usuario debe existir; el tiquete conserva `CreatedBy` desde
-    `user.Username` y `NodeID` desde `user.NodeId` en el momento de la venta.
+20. El tiquete conserva `CreatedBy` desde el claim `unique_name` y `NodeID`
+    desde el claim `node_id` del token en el momento de la venta.
     No recibe un club independiente desde el frontend ni persiste el UUID
     del usuario.
 21. El tiquete conserva sus apuestas, obtiene el total sumando sus valores sin almacenarlo,
@@ -711,7 +707,7 @@ creación están indicadas en la sección 7.3.3 y no se consideran implementadas
 22. El tiquete se asocia al sorteo mediante su `TIR` positivo y único. El
     listado muestra ese número de tiro desde los datos del tiquete, sin
     consultar el sorteo por cada fila ni almacenar su UUID en el tiquete.
-23. El tiquete copia `user.Username` a `CreatedBy` al crearse y el listado devuelve ese
+23. El tiquete copia el username del token a `CreatedBy` al crearse y el listado devuelve ese
     nombre histórico sin consultar al usuario por cada fila. Un cambio de
     username no altera los tiquetes anteriores. No existen campos `UserID` ni
     `Username` en el tiquete y el frontend no suministra `CreatedBy` al crearlo.

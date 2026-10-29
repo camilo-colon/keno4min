@@ -1,9 +1,10 @@
 # 0024. Tomar el vendedor del token al crear tiquetes
 
-- Estado: Aceptada
+- Estado: Reemplazada
 - Fecha: 2026-10-28
 - Responsables: Equipo de cronos
 - Reemplaza: [ADR 0019](0019-generar-identificador-del-tiquete-en-el-backend.md)
+- Reemplazada por: [ADR 0025](0025-tomar-club-y-vendedor-de-los-claims-del-token.md)
 
 ## Contexto
 

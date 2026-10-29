@@ -7,7 +7,6 @@ import (
 	dynamodbfx "github.com/cronos/keno4min/internal/platform/awsfx/dynamodbfx"
 	"github.com/cronos/keno4min/internal/platform/serverfx"
 	"github.com/cronos/keno4min/internal/tickets/ticketsfx"
-	"github.com/cronos/keno4min/internal/users/usersfx"
 	"go.uber.org/fx"
 )
 
@@ -21,7 +20,6 @@ func apiModule() fx.Option {
 		awsfx.Module,
 		dynamodbfx.Module,
 		drawsfx.Module,
-		usersfx.RepositoryModule,
 		ticketsfx.Module,
 		serverfx.Module,
 	)

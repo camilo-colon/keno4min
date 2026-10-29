@@ -32,7 +32,7 @@ internal/
 │   ├── ports/
 │   │   └── repository.go    # Puerto de generación de cupones y guardado de tiquetes
 │   ├── usecase/
-│   │   └── create.go        # Consulta del usuario, generación del UUID y cupón, creación
+│   │   └── create.go        # Generación del UUID y cupón, creación
 │   ├── ticketsfx/           # Registro Fx de creación y ruta raíz
 │   └── adapters/
 │       ├── dynamodb/
@@ -93,12 +93,12 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
   implementa ese contrato usando el SDK
   AWS y la configuración de la tabla. El formato persistido permanece en el
   adaptador; no se agregan etiquetas de almacenamiento al dominio.
-- `tickets/usecase` depende del dominio `tickets`, de `tickets/ports`,
-  `users/ports` y `draws/ports`. Consulta al vendedor y obtiene el draw mediante
-  `GetCurrent`; no importa adaptadores, HTTP ni AWS.
+- `tickets/usecase` depende del dominio `tickets`, de `tickets/ports` y
+  `draws/ports`. Recibe el club y el vendedor como parámetros y obtiene el draw
+  mediante `GetCurrent`; no importa adaptadores, HTTP, AWS ni `users`.
 - `tickets/ticketsfx` compone repositorio, caso de uso, handler y rutas.
-  `cmd/api` agrega este módulo y `usersfx.RepositoryModule`; el worker reutiliza
-  el mismo módulo de repositorio de usuarios sin cargar HTTP.
+  `cmd/api` agrega este módulo sin `usersfx`; el repositorio de usuarios solo
+  se carga en el worker y el generador.
 - `serverfx` registra el grupo Fx `rootRoutes` en la raíz y conserva `routes`
   bajo `/v1`. Consulta el [ADR 0020](adrs/0020-conectar-creacion-http-de-tiquetes.md).
 - `cmd/api` construye el cliente AWS, el store, el caso de uso y el handler, y
@@ -225,17 +225,16 @@ El módulo no administra autenticación ni permisos. Consulta el
 
 `internal/tickets/ticket.go` implementa `Ticket`, `Bet`, sus estados y el
 constructor `Create`. `tickets/usecase.Create` implementa la coordinación de
-la consulta del usuario, la generación del UUID v7 y del cupón, y el guardado.
+la validación del sorteo, la generación del UUID v7 y del cupón, y el guardado.
 El contrato HTTP y las reglas acordadas están en el
 [PRD, sección 7.3](product-requirements.md#73-creación).
 El [modelo de tiquetes](data-model/ticket-access-patterns.md) define el dominio
 `Ticket` y `Bet`, sus atributos persistidos, el contador global y la reserva
-exclusiva del cupón. El [ADR 0024](adrs/0024-tomar-el-vendedor-del-token-al-crear-tiquetes.md)
-registra la decisión vigente: el backend genera el UUID v7 y toma el vendedor
-del token; la creación consulta al usuario y conserva `user.NodeId` como club de la venta y
-`user.Username` en `CreatedBy` como nombre histórico del vendedor. El tiquete
-no conserva el UUID del usuario; el UUID del token se usa para consultarlo durante la
-creación. El listado incluirá `createdBy` y TIR desde los datos del tiquete,
+exclusiva del cupón. El [ADR 0025](adrs/0025-tomar-club-y-vendedor-de-los-claims-del-token.md)
+registra la decisión vigente: el backend genera el UUID v7 y la creación toma del
+token `node_id` como club de la venta y `unique_name` en `CreatedBy` como nombre
+histórico del vendedor, sin consultar la réplica de usuarios. El tiquete no
+conserva el UUID del usuario. El listado incluirá `createdBy` y TIR desde los datos del tiquete,
 evitando consultas por cada fila.
 
 El tiquete se asocia al sorteo mediante su TIR, sin guardar un UUID adicional
@@ -258,9 +257,9 @@ raíz y el runtime conserva `/v1/draws/runtime`. El contrato JSON, los códigos
 HTTP se definen en el PRD, sección 7.3.8. Los límites técnicos configurables de
 cantidad de apuestas y longitud de query quedan pendientes.
 
-`usecase.NewCreate` recibe los repositorios de tiquetes, usuarios y sorteos.
-`Execute` recibe `CreateParams` con `UserID` y `Bets`. Consulta `FindById` y
-devuelve `ErrUserNotFound` si no existe. Después obtiene el draw canónico con
+`usecase.NewCreate` recibe los repositorios de tiquetes y sorteos.
+`Execute` recibe `CreateParams` con `NodeID`, `CreatedBy` y `Bets`, que el
+handler completa desde `auth.Identity`. Obtiene el draw canónico con
 `draws.Repository.GetCurrent` y llama a `Draw.AcceptsTicketsAt` con la hora UTC
 del servidor antes del contador. El repositorio encapsula `GetRuntime` y
 `FindByID` usando `Current.DrawId`, comprueba la referencia y coincidencia del
@@ -271,7 +270,7 @@ en la transacción. Consulta el
 [ADR 0021](adrs/0021-validar-ventana-del-sorteo-al-crear-tiquetes.md).
 
 Después genera cupón y UUID v7, construye con `tickets.Create` usando el nodo y
-username del usuario, y guarda mediante `Save`. Solo devuelve el tiquete tras
+username recibidos, y guarda mediante `Save`. Solo devuelve el tiquete tras
 un guardado exitoso. Propaga el contexto; los errores o la ausencia de draw en
 `GetCurrent` se clasifican como `ErrDrawUnavailable`. El constructor mantiene sus
 validaciones, aunque el adaptador ya haya validado las apuestas. Un rechazo
