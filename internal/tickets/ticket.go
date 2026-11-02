@@ -12,6 +12,9 @@ import (
 	"github.com/cronos/keno4min/internal/tickets/events"
 )
 
+// Game identifies this product in the events consumed by other systems.
+const Game = "keno4min"
+
 var ErrBettingClosed = errors.New("draw is not accepting tickets")
 
 type Bet struct {
@@ -74,17 +77,17 @@ func (t *Ticket) TotalCents() int64 {
 func (t *Ticket) recordCreated() {
 	bets := make([]events.Bet, len(t.Bets))
 	for i, bet := range t.Bets {
-		bets[i] = events.Bet{Nums: slices.Clone(bet.Nums), ValueCents: bet.ValueCents}
+		bets[i] = events.Bet{Numbers: slices.Clone(bet.Nums), ValueCents: bet.ValueCents}
 	}
 	t.Record(events.TicketCreated{
 		BaseEvent:  common.NewBaseEvent(t.CreatedAt),
 		TicketID:   t.ID,
+		Game:       Game,
 		Coupon:     t.Coupon,
 		NodeID:     t.NodeID,
-		TIR:        t.TIR,
-		Bets:       bets,
-		TotalCents: t.TotalCents(),
 		CreatedBy:  t.CreatedBy,
+		ValueCents: t.TotalCents(),
+		Details:    events.TicketCreatedDetails{TIR: t.TIR, Bets: bets},
 	})
 }
 
