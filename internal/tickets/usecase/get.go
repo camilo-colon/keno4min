@@ -27,7 +27,6 @@ func (g *Get) Execute(ctx context.Context, params GetParams) (*tickets.Ticket, e
 	if err != nil {
 		return nil, err
 	}
-	// A ticket of another club is reported as missing so its existence is not revealed.
 	if ticket.NodeID != params.NodeID {
 		return nil, fmt.Errorf("%w: %s", ports.ErrTicketNotFound, params.TicketID)
 	}
