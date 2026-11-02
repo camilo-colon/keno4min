@@ -22,7 +22,7 @@ func NewNodeCretedSubscriber(create *usecase.Create) *NodeCreatedSubscriber {
 }
 
 func (h NodeCreatedSubscriber) On(ctx context.Context, domainEvent common.DomainEvent) error {
-	event, ok := domainEvent.(events.NodeCreatedDomainEvent)
+	event, ok := domainEvent.(events.NodeCreated)
 	if !ok {
 		return errors.New("domain event isn't NodeCreatedDomainEvent")
 	}
@@ -40,7 +40,7 @@ func (h NodeCreatedSubscriber) On(ctx context.Context, domainEvent common.Domain
 }
 
 func (n NodeCreatedSubscriber) SubscribeTo() []common.DomainEvent {
-	return []common.DomainEvent{events.NodeCreatedDomainEvent{}}
+	return []common.DomainEvent{events.NodeCreated{}}
 }
 
 func (n NodeCreatedSubscriber) Name() string {

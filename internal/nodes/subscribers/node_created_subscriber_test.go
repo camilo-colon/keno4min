@@ -27,7 +27,7 @@ func (r *recordingRepository) Save(_ context.Context, node *nodes.Node) error {
 }
 
 func TestNodeCreatedMapsNodeIdentityAndLocation(t *testing.T) {
-	var event events.NodeCreatedDomainEvent
+	var event events.NodeCreated
 	err := json.Unmarshal([]byte(`{
 		"eventId":"afed5b77-1e8a-471f-9398-489784a1b897",
 		"nodeId":"f2a0dc45-9ab8-4553-bd7c-2d53b345a5f6",

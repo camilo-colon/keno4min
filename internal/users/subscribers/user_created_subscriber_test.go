@@ -39,7 +39,7 @@ func (r *recordingRepository) Save(_ context.Context, user *users.User) error {
 func TestUserCreatedRejectsOtherEvents(t *testing.T) {
 	repo := &recordingRepository{}
 	subscriber := NewUserCreatedSubscriber(usecase.NewCreate(repo))
-	if err := subscriber.On(context.Background(), events.NodeCreatedDomainEvent{}); err == nil {
+	if err := subscriber.On(context.Background(), events.NodeCreated{}); err == nil {
 		t.Fatal("expected wrong event error")
 	}
 	if repo.reads != 0 || repo.writes != 0 {

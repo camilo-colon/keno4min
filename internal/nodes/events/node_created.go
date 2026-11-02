@@ -7,11 +7,11 @@ import (
 	"github.com/cronos/keno4min/internal/nodes"
 )
 
-var _ common.DomainEvent = (*NodeCreatedDomainEvent)(nil)
+var _ common.DomainEvent = (*NodeCreated)(nil)
 
-const NodeCreatedDomainEventType = "cronos.core.node.created"
+const NodeCreatedType = "cronos.core.node.created"
 
-type NodeCreatedDomainEvent struct {
+type NodeCreated struct {
 	common.BaseEvent
 
 	NodeId       uuid.UUID      `json:"nodeId"`
@@ -26,6 +26,6 @@ type NodeCreatedDomainEvent struct {
 	Active       bool           `json:"active"`
 }
 
-func (n NodeCreatedDomainEvent) Type() string {
-	return NodeCreatedDomainEventType
+func (n NodeCreated) Type() string {
+	return NodeCreatedType
 }
