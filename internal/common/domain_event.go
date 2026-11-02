@@ -16,6 +16,11 @@ type BaseEvent struct {
 	OccurredOn time.Time `json:"occurredOnUtc"`
 }
 
+// NewBaseEvent keeps occurredOnUtc in UTC with millisecond precision, as the outbox persists it.
+func NewBaseEvent(occurredOn time.Time) BaseEvent {
+	return BaseEvent{EventId: uuid.NewV7(), OccurredOn: occurredOn.UTC().Truncate(time.Millisecond)}
+}
+
 func (b BaseEvent) Id() uuid.UUID {
 	return b.EventId
 }

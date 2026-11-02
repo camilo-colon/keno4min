@@ -1,7 +1,6 @@
 package outbox
 
 import (
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -48,7 +47,7 @@ func TestTransactItems(t *testing.T) {
 	})
 
 	t.Run("writes one conditional outbox item per event", func(t *testing.T) {
-		event := newTestEvent(now.Add(-time.Second))
+		event := newTestEvent(now.Add(-877 * time.Millisecond))
 		aggregate := &testAggregate{}
 		aggregate.Record(event)
 
@@ -71,6 +70,7 @@ func TestTransactItems(t *testing.T) {
 		if err := attributevalue.UnmarshalMap(put.Item, &got); err != nil {
 			t.Fatalf("unmarshal item: %v", err)
 		}
+		// detail is the contract with the Pipe and consumers, so its keys are fixed here.
 		want := outboxItem{
 			PK:            "OUTBOX#" + event.EventId.String(),
 			SK:            "META",
@@ -78,20 +78,12 @@ func TestTransactItems(t *testing.T) {
 			EventID:       event.EventId.String(),
 			EventType:     testEventType,
 			Source:        "cronos.keno4min",
-			Detail:        got.Detail,
-			OccurredOnUtc: "2026-11-02T15:04:04.000Z",
+			Detail:        `{"eventId":"` + event.EventId.String() + `","occurredOnUtc":"2026-11-02T15:04:04.123Z","amountCents":1500}`,
+			OccurredOnUtc: "2026-11-02T15:04:04.123Z",
 			TTL:           now.Add(7 * 24 * time.Hour).Unix(),
 		}
 		if got != want {
 			t.Fatalf("got %+v, want %+v", got, want)
-		}
-
-		var detail testEvent
-		if err := json.Unmarshal([]byte(got.Detail), &detail); err != nil {
-			t.Fatalf("detail is not the event JSON: %v", err)
-		}
-		if detail.EventId != event.EventId || detail.AmountCents != event.AmountCents {
-			t.Fatalf("detail = %+v, want %+v", detail, event)
 		}
 	})
 
