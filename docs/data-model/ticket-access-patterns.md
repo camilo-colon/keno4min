@@ -82,8 +82,9 @@ valores de la sección 7.2 del PRD, sin límites monetarios por club. Los import
 usan `int64` y deben ser positivos. El total se obtiene sumando `ValueCents`;
 no es un campo del dominio ni se persiste como atributo del tiquete. `Create`
 mantiene una suma local únicamente para rechazar desbordamientos de `int64`.
-El adaptador HTTP usa `strconv.ParseUint` con 8 bits antes de convertir a
-`uint8`, impidiendo que una conversión oculte negativos o desbordamientos.
+Los números de cada apuesta son `[]uint` en el dominio. El adaptador HTTP usa
+`strconv.ParseUint` con 8 bits antes de convertir a `uint`, impidiendo que una
+conversión oculte negativos o desbordamientos.
 El constructor usa `validateBets` para exigir números entre `1` y `80`, valores
 positivos y una suma sin desbordamiento; el adaptador no repite esa validación.
 
@@ -114,6 +115,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | Contador global | `COUNTER#TICKET` | `META` | `value`: Number, entero procesado como `uint64` |
 | Tiquete canónico | `TICKET#<ticketId>` | `META` | `ticketId`: UUID v7 como String con guiones; `coupon`: String; datos de negocio exigidos por el PRD |
 | Reserva y búsqueda por cupón | `COUPON#<coupon>` | `META` | `ticketId`: UUID del tiquete asociado |
+| Evento pendiente de publicar | `OUTBOX#<eventId>` | `META` | `entityType = OUTBOX`; `eventType`, `source`, `detail` (JSON del evento), `occurredOnUtc` y `ttl` en segundos epoch. Lo escribe `platform/outbox` |
 
 ### Atributos del tiquete canónico
 
@@ -132,9 +134,9 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 
 Los UUID se almacenan en su representación canónica con guiones. El adaptador
 usa `ticketItem`, `betItem` y `couponItem`, con etiquetas `dynamodbav`, y
-`attributevalue.MarshalMap` del SDK oficial. `betItem.Nums` es `[]uint`, de modo
-que `nums` se serializa como List de Number y no como el binario que produciría
-`[]uint8`. Los valores monetarios se conservan como enteros `int64` y el TIR
+`attributevalue.MarshalMap` del SDK oficial. `betItem.Nums` es `[]uint`, igual
+que en el dominio, de modo que `nums` se serializa como List de Number y no como
+el binario que produciría `[]uint8`. Los valores monetarios se conservan como enteros `int64` y el TIR
 como `uint64`, sin conversiones a coma flotante.
 `CreatedAt` conserva su tipo `time.Time` en el dominio. El adaptador persiste
 `createdAt` en UTC con milisegundos de ancho fijo, descartando la precisión
@@ -245,7 +247,7 @@ previstas que todavía no están implementadas.
 | ID | Operación | Acceso | Condición o consistencia |
 | --- | --- | --- | --- |
 | `AP-TICKET-01` | Asignar el siguiente consecutivo | `UpdateItem` en `COUNTER#TICKET` / `META` | Contador existente y dentro del intervalo; devuelve el nuevo valor |
-| `AP-TICKET-02` | Guardar tiquete y reservar cupón | `TransactWriteItems`, con dos `Put` en el tiquete y su reserva | `attribute_not_exists(PK)` en cada `Put` |
+| `AP-TICKET-02` | Guardar tiquete, reservar cupón y registrar sus eventos | `TransactWriteItems`, con un `Put` en el tiquete, otro en su reserva y uno `OUTBOX#<eventId>` por evento | `attribute_not_exists(PK)` en cada `Put` |
 | `AP-TICKET-03` | Resolver un tiquete por cupón | `GetItem` en `COUPON#<coupon>` / `META`; luego `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte en ambas operaciones |
 | `AP-TICKET-04` | Listar tiquetes por TIR | `Query` en `GSI1`, `GSI1PK = TICKETS#TIR#<tir>` | Eventual; paginar hasta agotar resultados |
 | `AP-TICKET-05` | Listar tiquetes por nodo y rango de creación | `Query` en `GSI2`, `GSI2PK = TICKETS#NODE#<nodeId>` y rango sobre `GSI2SK` | Eventual; rango `[from, to)` y cursor completo |
@@ -373,8 +375,11 @@ un cupón reservado nunca se reasigna ni se sobrescribe. La consulta previa de
 existencia o un GSI por cupón no sustituyen esta condición.
 
 `Save` recibe un tiquete ya preparado: serializa sus datos y el vínculo de
-reserva, y realiza una única llamada `TransactWriteItems` con dos `Put` sobre
-la tabla configurada. No ejecuta lecturas previas ni actualiza el contador.
+reserva, toma los eventos del agregado con `outbox.TransactItems` y realiza una
+única llamada `TransactWriteItems` sobre la tabla configurada. Al crearse, el
+tiquete registra `cronos.keno4min.ticket.created`, así que la transacción lleva
+tres `Put`: tiquete, reserva y registro outbox. Si la transacción falla, los
+eventos ya salieron del agregado: no se reintenta con la misma instancia. No ejecuta lecturas previas ni actualiza el contador.
 Un argumento nulo devuelve un error antes de enviar solicitudes.
 
 Una reserva ya existente bloquea el segundo tiquete y requiere tratar el

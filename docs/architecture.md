@@ -82,8 +82,12 @@ crean cuando se implementa una responsabilidad, sin anticipar operaciones.
 - Los adaptadores no se importan entre sí. Un adaptador puede implementar varios
   contratos pequeños; no se introduce un repositorio CRUD genérico.
 - `tickets` contiene `Ticket`, `Bet`, `Status` y el constructor `Create` con sus
-  validaciones de dominio. Depende únicamente de la biblioteca estándar, sin
-  importar HTTP ni persistencia.
+  validaciones de dominio. `Ticket` embebe `common.AggregateRoot` y `Create`
+  registra `TicketCreated`. Depende de la biblioteca estándar, de
+  `common` y de `tickets/events`, sin importar HTTP ni persistencia.
+- `tickets/events` define los contratos de eventos del tiquete. No importa
+  `tickets`, para que el agregado pueda registrarlos sin ciclos; por eso copia
+  las apuestas con números `[]uint`, que se serializan como arreglo JSON.
 - `tickets/adapters/http` depende de Fiber, de `platform/auth`, del caso de uso
   y del dominio.
   Toma el club y el vendedor de `auth.Identity`, interpreta la query y serializa el tiquete
@@ -284,11 +288,12 @@ registro inicial debe prepararse una sola vez en el entorno; el método no lo
 recrea ni reinicia si falta o se agota.
 
 `Save`, en el mismo adaptador `tickets/adapters/dynamodb`, guarda el tiquete
-canónico y reserva el cupón mediante un único
-`TransactWriteItems`, con condiciones de no existencia para ambos ítems.
+canónico, reserva el cupón y escribe sus eventos pendientes como registros
+`OUTBOX#<eventId>` (generados por `platform/outbox`) mediante un único
+`TransactWriteItems`, con condiciones de no existencia para todos los ítems.
 Los duplicados y demás errores se propagan; no hay escrituras alternativas
-tras una cancelación. El mapeo convierte los números de cada apuesta a una
-lista numérica sin modificar la entidad.
+tras una cancelación. Los números de cada apuesta ya son `[]uint`
+en el dominio, así que se persisten como lista numérica sin conversión.
 
 El adaptador conserva `CreatedAt` como `time.Time` en el dominio y persiste
 `createdAt` como String en UTC con milisegundos de ancho fijo. El mismo ítem

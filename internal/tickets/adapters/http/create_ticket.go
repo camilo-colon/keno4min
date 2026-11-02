@@ -64,13 +64,13 @@ func parseCreateTicket(ctx fiber.Ctx) (usecase.CreateParams, error) {
 	bets := make([]tickets.Bet, len(selections))
 	for i, selection := range selections {
 		numbers := strings.Split(selection, ";")
-		bets[i].Nums = make([]uint8, len(numbers))
+		bets[i].Nums = make([]uint, len(numbers))
 		for j, number := range numbers {
 			value, err := strconv.ParseUint(number, 10, 8)
 			if err != nil {
 				return usecase.CreateParams{}, errors.New("bet numbers must be positive integers between 1 and 80")
 			}
-			bets[i].Nums[j] = uint8(value)
+			bets[i].Nums[j] = uint(value)
 		}
 		value, err := strconv.ParseUint(values[i], 10, 63)
 		if err != nil {

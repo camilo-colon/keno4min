@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/cronos/keno4min/internal/config"
+	"github.com/cronos/keno4min/internal/platform/outbox"
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/ports"
 )
@@ -89,19 +90,25 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 		return fmt.Errorf("marshal coupon for ticket %s: %w", ticket.ID, err)
 	}
 
+	transactItems := []types.TransactWriteItem{
+		{Put: &types.Put{
+			TableName:           aws.String(r.tableName),
+			Item:                item,
+			ConditionExpression: aws.String("attribute_not_exists(PK)"),
+		}},
+		{Put: &types.Put{
+			TableName:           aws.String(r.tableName),
+			Item:                coupon,
+			ConditionExpression: aws.String("attribute_not_exists(PK)"),
+		}},
+	}
+	outboxItems, err := outbox.TransactItems(r.tableName, time.Now(), ticket)
+	if err != nil {
+		return fmt.Errorf("outbox for ticket %s: %w", ticket.ID, err)
+	}
+
 	_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: []types.TransactWriteItem{
-			{Put: &types.Put{
-				TableName:           aws.String(r.tableName),
-				Item:                item,
-				ConditionExpression: aws.String("attribute_not_exists(PK)"),
-			}},
-			{Put: &types.Put{
-				TableName:           aws.String(r.tableName),
-				Item:                coupon,
-				ConditionExpression: aws.String("attribute_not_exists(PK)"),
-			}},
-		},
+		TransactItems: append(transactItems, outboxItems...),
 	})
 	if err != nil {
 		return fmt.Errorf("save ticket %s: %w", ticket.ID, err)

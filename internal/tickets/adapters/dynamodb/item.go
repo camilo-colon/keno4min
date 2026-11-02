@@ -57,11 +57,7 @@ func ticketKey(id uuid.UUID) map[string]types.AttributeValue {
 func toItem(ticket *tickets.Ticket) ticketItem {
 	bets := make([]betItem, len(ticket.Bets))
 	for i, bet := range ticket.Bets {
-		nums := make([]uint, len(bet.Nums))
-		for j, num := range bet.Nums {
-			nums[j] = uint(num)
-		}
-		bets[i] = betItem{Nums: nums, ValueCents: bet.ValueCents}
+		bets[i] = betItem{Nums: bet.Nums, ValueCents: bet.ValueCents}
 	}
 
 	createdAt := formatCreatedAt(ticket.CreatedAt)
@@ -97,11 +93,7 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 
 	bets := make([]tickets.Bet, len(item.Bets))
 	for i, bet := range item.Bets {
-		nums := make([]uint8, len(bet.Nums))
-		for j, num := range bet.Nums {
-			nums[j] = uint8(num)
-		}
-		bets[i] = tickets.Bet{Nums: nums, ValueCents: bet.ValueCents}
+		bets[i] = tickets.Bet{Nums: bet.Nums, ValueCents: bet.ValueCents}
 	}
 
 	createdAt, err := time.Parse(time.RFC3339Nano, item.CreatedAt)

@@ -3,15 +3,19 @@ package tickets
 import (
 	"errors"
 	"math"
+	"slices"
 	"strings"
 	"time"
 	"uuid"
+
+	"github.com/cronos/keno4min/internal/common"
+	"github.com/cronos/keno4min/internal/tickets/events"
 )
 
 var ErrBettingClosed = errors.New("draw is not accepting tickets")
 
 type Bet struct {
-	Nums       []uint8
+	Nums       []uint
 	ValueCents int64
 }
 
@@ -26,6 +30,8 @@ const (
 )
 
 type Ticket struct {
+	common.AggregateRoot
+
 	ID         uuid.UUID
 	Coupon     string
 	NodeID     uuid.UUID
@@ -52,7 +58,34 @@ func Create(id uuid.UUID, coupon string, nodeID uuid.UUID, tir uint64, bets []Be
 	if err := ticket.validate(); err != nil {
 		return nil, err
 	}
+	ticket.recordCreated()
 	return ticket, nil
+}
+
+// TotalCents assumes validated bets, whose sum cannot overflow.
+func (t Ticket) TotalCents() int64 {
+	var total int64
+	for _, bet := range t.Bets {
+		total += bet.ValueCents
+	}
+	return total
+}
+
+func (t *Ticket) recordCreated() {
+	bets := make([]events.Bet, len(t.Bets))
+	for i, bet := range t.Bets {
+		bets[i] = events.Bet{Nums: slices.Clone(bet.Nums), ValueCents: bet.ValueCents}
+	}
+	t.Record(events.TicketCreated{
+		BaseEvent:  common.NewBaseEvent(t.CreatedAt),
+		TicketID:   t.ID,
+		Coupon:     t.Coupon,
+		NodeID:     t.NodeID,
+		TIR:        t.TIR,
+		Bets:       bets,
+		TotalCents: t.TotalCents(),
+		CreatedBy:  t.CreatedBy,
+	})
 }
 
 func (t Ticket) validate() error {
