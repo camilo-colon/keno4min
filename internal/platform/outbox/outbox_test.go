@@ -37,7 +37,7 @@ func TestTransactItems(t *testing.T) {
 	now := time.Date(2026, 11, 2, 15, 4, 5, 0, time.UTC)
 
 	t.Run("returns no items when the aggregate has no events", func(t *testing.T) {
-		items, err := TransactItems(testTable, now, &testAggregate{})
+		items, err := TransactItems(testTable, &testAggregate{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -51,7 +51,7 @@ func TestTransactItems(t *testing.T) {
 		aggregate := &testAggregate{}
 		aggregate.Record(event)
 
-		items, err := TransactItems(testTable, now, aggregate)
+		items, err := TransactItems(testTable, aggregate)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -80,7 +80,7 @@ func TestTransactItems(t *testing.T) {
 			Source:        "cronos.keno4min",
 			Detail:        `{"eventId":"` + event.EventId.String() + `","occurredOnUtc":"2026-11-02T15:04:04.123Z","amountCents":1500}`,
 			OccurredOnUtc: "2026-11-02T15:04:04.123Z",
-			TTL:           now.Add(7 * 24 * time.Hour).Unix(),
+			TTL:           time.Date(2026, 11, 9, 15, 4, 4, 123000000, time.UTC).Unix(),
 		}
 		if got != want {
 			t.Fatalf("got %+v, want %+v", got, want)
@@ -91,10 +91,10 @@ func TestTransactItems(t *testing.T) {
 		aggregate := &testAggregate{}
 		aggregate.Record(newTestEvent(now))
 
-		if _, err := TransactItems(testTable, now, aggregate); err != nil {
+		if _, err := TransactItems(testTable, aggregate); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		items, err := TransactItems(testTable, now, aggregate)
+		items, err := TransactItems(testTable, aggregate)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -108,16 +108,24 @@ func TestTransactItems(t *testing.T) {
 		for range maxTransactItems + 1 {
 			aggregate.Record(newTestEvent(now))
 		}
-		_, err := TransactItems(testTable, now, aggregate)
+		_, err := TransactItems(testTable, aggregate)
 		if !errors.Is(err, ErrTooManyEvents) {
 			t.Fatalf("got %v, want ErrTooManyEvents", err)
+		}
+	})
+
+	t.Run("rejects an event without occurrence date", func(t *testing.T) {
+		aggregate := &testAggregate{}
+		aggregate.Record(testEvent{EventId: uuid.NewV7()})
+		if _, err := TransactItems(testTable, aggregate); err == nil {
+			t.Fatal("expected an error for an event without occurrence date")
 		}
 	})
 
 	t.Run("rejects an event without id", func(t *testing.T) {
 		aggregate := &testAggregate{}
 		aggregate.Record(testEvent{OccurredOn: now})
-		if _, err := TransactItems(testTable, now, aggregate); err == nil {
+		if _, err := TransactItems(testTable, aggregate); err == nil {
 			t.Fatal("expected an error for an event without id")
 		}
 	})

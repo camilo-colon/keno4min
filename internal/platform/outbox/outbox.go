@@ -21,17 +21,17 @@ const (
 var ErrTooManyEvents = errors.New("too many domain events for one transaction")
 
 // TransactItems pulls the aggregate events and returns one conditional Put per event.
+// Each item expires a retention period after its event occurred.
 // The caller must keep the whole transaction within the DynamoDB action limit.
-func TransactItems(tableName string, now time.Time, aggregate common.Aggregate) ([]types.TransactWriteItem, error) {
+func TransactItems(tableName string, aggregate common.Aggregate) ([]types.TransactWriteItem, error) {
 	events := aggregate.PullDomainEvents()
 	if len(events) > maxTransactItems {
 		return nil, fmt.Errorf("%w: %d", ErrTooManyEvents, len(events))
 	}
 
-	expiresAt := now.Add(retention)
 	items := make([]types.TransactWriteItem, 0, len(events))
 	for _, event := range events {
-		item, err := toItem(event, expiresAt)
+		item, err := toItem(event)
 		if err != nil {
 			return nil, err
 		}

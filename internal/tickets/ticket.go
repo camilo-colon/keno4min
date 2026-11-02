@@ -63,7 +63,7 @@ func Create(id uuid.UUID, coupon string, nodeID uuid.UUID, tir uint64, bets []Be
 }
 
 // TotalCents assumes validated bets, whose sum cannot overflow.
-func (t Ticket) TotalCents() int64 {
+func (t *Ticket) TotalCents() int64 {
 	var total int64
 	for _, bet := range t.Bets {
 		total += bet.ValueCents
@@ -88,7 +88,7 @@ func (t *Ticket) recordCreated() {
 	})
 }
 
-func (t Ticket) validate() error {
+func (t *Ticket) validate() error {
 	if t.ID == uuid.Nil() {
 		return errors.New("ticket id is required")
 	}

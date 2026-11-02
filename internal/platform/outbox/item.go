@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 	"uuid"
 
 	"github.com/cronos/keno4min/internal/common"
@@ -27,9 +26,13 @@ type outboxItem struct {
 	TTL           int64  `dynamodbav:"ttl"`
 }
 
-func toItem(event common.DomainEvent, expiresAt time.Time) (outboxItem, error) {
+func toItem(event common.DomainEvent) (outboxItem, error) {
 	if event.Id() == uuid.Nil() {
 		return outboxItem{}, errors.New("event id is required")
+	}
+	// A zero date would set a ttl in 1970 and DynamoDB could delete the item right away.
+	if event.OccurredOnUtc().IsZero() {
+		return outboxItem{}, fmt.Errorf("event %s must have an occurrence date", event.Id())
 	}
 	detail, err := json.Marshal(event)
 	if err != nil {
@@ -44,6 +47,6 @@ func toItem(event common.DomainEvent, expiresAt time.Time) (outboxItem, error) {
 		Source:        source,
 		Detail:        string(detail),
 		OccurredOnUtc: event.OccurredOnUtc().UTC().Format(occurredOnLayout),
-		TTL:           expiresAt.Unix(),
+		TTL:           event.OccurredOnUtc().Add(retention).Unix(),
 	}, nil
 }

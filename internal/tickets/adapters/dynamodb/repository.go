@@ -102,7 +102,7 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 			ConditionExpression: aws.String("attribute_not_exists(PK)"),
 		}},
 	}
-	outboxItems, err := outbox.TransactItems(r.tableName, time.Now(), ticket)
+	outboxItems, err := outbox.TransactItems(r.tableName, ticket)
 	if err != nil {
 		return fmt.Errorf("outbox for ticket %s: %w", ticket.ID, err)
 	}
