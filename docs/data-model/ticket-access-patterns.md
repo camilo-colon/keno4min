@@ -7,7 +7,10 @@ nodo y rango de creación (`AP-TICKET-05`) está implementado y expuesto en
 en la query se ignora ([ADR 0026](../adrs/0026-filtrar-el-listado-de-tiquetes-por-el-club-del-token.md)). La consulta por ID
 (`AP-TICKET-06`) está expuesta en `GET /tickets/:id` e incluye las bolas
 copiadas al tiquete por la liquidación. La consulta por lote de IDs
-(`AP-TICKET-07`) está expuesta en `POST /tickets/lookup`. Las demás lecturas de tiquetes y la aceptación financiera
+(`AP-TICKET-07`) está expuesta en `POST /tickets/lookup`. La repetición,
+expuesta en `POST /tickets/:id/repeat`, lee el original con `AP-TICKET-06` y
+guarda el nuevo tiquete con la misma escritura de la creación; no agrega ítems,
+atributos ni índices, y el tiquete repetido no registra su origen. Las demás lecturas de tiquetes y la aceptación financiera
 siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y

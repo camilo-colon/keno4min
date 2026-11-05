@@ -17,10 +17,12 @@ var Module = fx.Module(
 		usecase.NewList,
 		usecase.NewGet,
 		usecase.NewLookup,
+		usecase.NewRepeat,
 		http.NewCreateTicketHandler,
 		http.NewListTicketsHandler,
 		http.NewGetTicketHandler,
 		http.NewLookupTicketsHandler,
+		http.NewRepeatTicketHandler,
 		fx.Annotate(
 			http.NewRoutes,
 			fx.As(new(serverfx.Route)),

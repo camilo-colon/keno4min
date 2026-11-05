@@ -119,6 +119,69 @@ paths:
           $ref: "#/components/responses/Problem"
         default:
           $ref: "#/components/responses/Problem"
+  /tickets/{id}/repeat:
+    post:
+      summary: Repeat a ticket in the current draw
+      operationId: repeatTicket
+      description: >-
+        Creates a new ticket in the draw that is open at the time of the request,
+        copying every bet of the original ticket with its numbers and values. The
+        new ticket gets its own ID and coupon. The club (node_id) and the seller
+        (unique_name) are taken from the bearer token, not from the original
+        ticket. Any cashier of the same club can repeat a ticket, whatever its
+        status, including cancelled tickets. The request goes through the same
+        draw window validation as ticket creation. No request body is accepted.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the ticket to repeat.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: Ticket created in the current draw.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedTicket"
+        "400":
+          description: The ticket ID is not a valid UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
+        "401":
+          description: The bearer token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
+        "404":
+          description: The ticket does not exist or belongs to another club.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
+        "409":
+          description: The current draw is not accepting tickets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
+        "500":
+          description: The ticket could not be repeated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
+        "503":
+          description: The current draw is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
 components:
   headers:
     RequestID:
@@ -136,6 +199,76 @@ components:
           schema:
             $ref: "#/components/schemas/ProblemDetails"
   schemas:
+    TicketBet:
+      type: object
+      required:
+        - nums
+        - valueCents
+      properties:
+        nums:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 1
+            maximum: 80
+        valueCents:
+          type: integer
+          minimum: 1
+          description: Bet value in the minimum currency unit.
+      additionalProperties: false
+    CreatedTicket:
+      type: object
+      required:
+        - id
+        - coupon
+        - nodeId
+        - tir
+        - bets
+        - totalCents
+        - status
+        - createdBy
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        coupon:
+          type: string
+        nodeId:
+          type: string
+          format: uuid
+        tir:
+          type: integer
+          minimum: 1
+        bets:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/TicketBet"
+        totalCents:
+          type: integer
+          minimum: 1
+          description: Sum of the bet values.
+        status:
+          type: string
+          const: pending
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    TicketError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+      additionalProperties: false
     Draw:
       type: object
       required:

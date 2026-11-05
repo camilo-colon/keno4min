@@ -7,10 +7,11 @@ type Routes struct {
 	listTickets   *ListTicketsHandler
 	getTicket     *GetTicketHandler
 	lookupTickets *LookupTicketsHandler
+	repeatTicket  *RepeatTicketHandler
 }
 
-func NewRoutes(createTicket *CreateTicketHandler, listTickets *ListTicketsHandler, getTicket *GetTicketHandler, lookupTickets *LookupTicketsHandler) *Routes {
-	return &Routes{createTicket: createTicket, listTickets: listTickets, getTicket: getTicket, lookupTickets: lookupTickets}
+func NewRoutes(createTicket *CreateTicketHandler, listTickets *ListTicketsHandler, getTicket *GetTicketHandler, lookupTickets *LookupTicketsHandler, repeatTicket *RepeatTicketHandler) *Routes {
+	return &Routes{createTicket: createTicket, listTickets: listTickets, getTicket: getTicket, lookupTickets: lookupTickets, repeatTicket: repeatTicket}
 }
 
 func (r *Routes) Register(router fiber.Router) {
@@ -18,4 +19,5 @@ func (r *Routes) Register(router fiber.Router) {
 	router.Post("/tickets/lookup", r.lookupTickets.Handle)
 	router.Get("/tickets", r.listTickets.Handle)
 	router.Get("/tickets/:id", r.getTicket.Handle)
+	router.Post("/tickets/:id/repeat", r.repeatTicket.Handle)
 }
