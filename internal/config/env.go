@@ -1,7 +1,9 @@
 package config
 
 import (
-	"log"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -25,10 +27,10 @@ type DynamodbConfig struct {
 }
 
 func Load() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-		return nil, err
+	// The .env file is optional: containers and deployed environments
+	// receive their configuration as real environment variables.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("load .env file: %w", err)
 	}
 
 	return &Config{
