@@ -130,7 +130,10 @@ paths:
         (unique_name) are taken from the bearer token, not from the original
         ticket. Any cashier of the same club can repeat a ticket, whatever its
         status, including cancelled tickets. The request goes through the same
-        draw window validation as ticket creation. No request body is accepted.
+        draw window validation as ticket creation. The ticket total is debited
+        from the club balance held by the core service before the ticket is
+        stored; if storing fails, the debit is reversed. No request body is
+        accepted.
       parameters:
         - name: id
           in: path
@@ -141,7 +144,9 @@ paths:
             format: uuid
       responses:
         "201":
-          description: Ticket created in the current draw.
+          description: >-
+            Ticket created in the current draw. The response includes the club
+            balance after the debit.
           content:
             application/json:
               schema:
@@ -170,6 +175,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TicketError"
+        "422":
+          description: The club balance does not cover the ticket total.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketError"
         "500":
           description: The ticket could not be repeated.
           content:
@@ -177,7 +188,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/TicketError"
         "503":
-          description: The current draw is unavailable.
+          description: >-
+            The current draw is unavailable, or the balance service of core
+            cannot be reached.
           content:
             application/json:
               schema:
@@ -231,6 +244,7 @@ components:
         - status
         - createdBy
         - createdAt
+        - balanceCents
       properties:
         id:
           type: string
@@ -260,6 +274,13 @@ components:
         createdAt:
           type: string
           format: date-time
+        balanceCents:
+          type: integer
+          format: int64
+          description: >-
+            Club balance reported by the core service after debiting the
+            ticket, in the minimum currency unit. Lets clients refresh the
+            balance without another call.
       additionalProperties: false
     TicketError:
       type: object
