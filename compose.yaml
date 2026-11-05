@@ -1,49 +1,32 @@
 # Entorno local de pruebas.
 #   docker compose up --build
 #
-# DynamoDB y SQS se emulan localmente; las credenciales AWS son ficticias.
-# Las tablas y colas no se crean automáticamente.
+# Usa las credenciales AWS de la máquina (~/.aws) y la configuración de .env.
 
-x-aws-local: &aws-local
-  ENVIRONMENT: development
-  AWS_REGION: us-east-1
-  AWS_ACCESS_KEY_ID: local
-  AWS_SECRET_ACCESS_KEY: local
-  DYNAMODB_TABLE: keno4min-local
-  DYNAMODB_ENDPOINT: http://dynamodb:8000
-  AWS_ENDPOINT_URL_SQS: http://sqs:9324
+x-common: &common
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    - AWS_PROFILE
+    - AWS_CONFIG_FILE=/home/nonroot/.aws/config
+    - AWS_SHARED_CREDENTIALS_FILE=/home/nonroot/.aws/credentials
+  volumes:
+    - ~/.aws:/home/nonroot/.aws:ro
 
 services:
   api:
+    <<: *common
     build:
       context: .
       target: api
     image: keno4min-api:local
-    environment:
-      <<: *aws-local
-      HTTP_ADDRESS: ":8080"
     ports:
       - "8080:8080"
-    depends_on:
-      - dynamodb
 
   worker:
+    <<: *common
     build:
       context: .
       target: worker
     image: keno4min-worker:local
-    environment: *aws-local
-    depends_on:
-      - dynamodb
-      - sqs
-
-  dynamodb:
-    image: amazon/dynamodb-local:3.3.2
-    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
-    ports:
-      - "8000:8000"
-
-  sqs:
-    image: softwaremill/elasticmq-native:1.7.1
-    ports:
-      - "9324:9324"
