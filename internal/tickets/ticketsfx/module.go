@@ -2,6 +2,7 @@ package ticketsfx
 
 import (
 	"github.com/cronos/keno4min/internal/platform/serverfx"
+	"github.com/cronos/keno4min/internal/tickets/adapters/core"
 	"github.com/cronos/keno4min/internal/tickets/adapters/dynamodb"
 	"github.com/cronos/keno4min/internal/tickets/adapters/http"
 	"github.com/cronos/keno4min/internal/tickets/ports"
@@ -13,6 +14,7 @@ var Module = fx.Module(
 	"tickets",
 	fx.Provide(
 		fx.Annotate(dynamodb.NewDynamodbRepository, fx.As(new(ports.Repository))),
+		fx.Annotate(core.NewClient, fx.As(new(ports.BalanceGateway))),
 		usecase.NewCreate,
 		usecase.NewList,
 		usecase.NewGet,

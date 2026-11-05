@@ -28,7 +28,7 @@ func (h *RepeatTicketHandler) Handle(ctx fiber.Ctx) error {
 	if err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ticket id must be a valid UUID"})
 	}
-	ticket, err := h.useCase.Execute(ctx, usecase.RepeatParams{
+	result, err := h.useCase.Execute(ctx, usecase.RepeatParams{
 		TicketID:  ticketID,
 		NodeID:    identity.NodeID,
 		CreatedBy: identity.Username,
@@ -42,8 +42,14 @@ func (h *RepeatTicketHandler) Handle(ctx fiber.Ctx) error {
 	if errors.Is(err, usecase.ErrDrawUnavailable) {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "current draw is unavailable"})
 	}
+	if errors.Is(err, ports.ErrInsufficientBalance) {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "insufficient node balance"})
+	}
+	if errors.Is(err, ports.ErrBalanceUnavailable) {
+		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "balance service is unavailable"})
+	}
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "could not repeat ticket"})
 	}
-	return ctx.Status(fiber.StatusCreated).JSON(toResponse(ticket))
+	return ctx.Status(fiber.StatusCreated).JSON(toResponse(result))
 }

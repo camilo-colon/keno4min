@@ -8,6 +8,7 @@ import (
 
 	"github.com/cronos/keno4min/internal/platform/auth"
 	"github.com/cronos/keno4min/internal/tickets"
+	"github.com/cronos/keno4min/internal/tickets/ports"
 	"github.com/cronos/keno4min/internal/tickets/usecase"
 	"github.com/gofiber/fiber/v3"
 )
@@ -35,17 +36,23 @@ func (h *CreateTicketHandler) Handle(ctx fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 	params.NodeID, params.CreatedBy = identity.NodeID, identity.Username
-	ticket, err := h.useCase.Execute(ctx, params)
+	result, err := h.useCase.Execute(ctx, params)
 	if errors.Is(err, tickets.ErrBettingClosed) {
 		return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "draw is not accepting tickets"})
 	}
 	if errors.Is(err, usecase.ErrDrawUnavailable) {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "current draw is unavailable"})
 	}
+	if errors.Is(err, ports.ErrInsufficientBalance) {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "insufficient node balance"})
+	}
+	if errors.Is(err, ports.ErrBalanceUnavailable) {
+		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "balance service is unavailable"})
+	}
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "could not create ticket"})
 	}
-	return ctx.Status(fiber.StatusCreated).JSON(toResponse(ticket))
+	return ctx.Status(fiber.StatusCreated).JSON(toResponse(result))
 }
 
 func parseCreateTicket(ctx fiber.Ctx) (usecase.CreateParams, error) {
@@ -96,11 +103,15 @@ type createTicketResponse struct {
 	Status     tickets.Status `json:"status"`
 	CreatedBy  string         `json:"createdBy"`
 	CreatedAt  time.Time      `json:"createdAt"`
+	// BalanceCents lets frontends refresh the node balance without another call.
+	BalanceCents int64 `json:"balanceCents"`
 }
 
-func toResponse(ticket *tickets.Ticket) createTicketResponse {
+func toResponse(created *usecase.CreateResult) createTicketResponse {
+	ticket := created.Ticket
 	result := createTicketResponse{
-		ID: ticket.ID.String(), Coupon: ticket.Coupon, NodeID: ticket.NodeID.String(),
+		BalanceCents: created.BalanceCents,
+		ID:           ticket.ID.String(), Coupon: ticket.Coupon, NodeID: ticket.NodeID.String(),
 		TIR: ticket.TIR, Status: ticket.Status, CreatedBy: ticket.CreatedBy, CreatedAt: ticket.CreatedAt,
 		Bets: make([]betResponse, len(ticket.Bets)),
 	}

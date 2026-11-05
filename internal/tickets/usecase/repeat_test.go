@@ -46,6 +46,19 @@ func (d *repeatDraws) GetCurrent(context.Context) (*draw.Draw, error) {
 	return d.current, nil
 }
 
+type repeatBalance struct {
+	debits []ports.BalanceMovement
+}
+
+func (b *repeatBalance) Debit(_ context.Context, movement ports.BalanceMovement) (ports.BalanceResult, error) {
+	b.debits = append(b.debits, movement)
+	return ports.BalanceResult{MovementID: "movement-1", BalanceAfterCents: 125000}, nil
+}
+
+func (b *repeatBalance) Credit(context.Context, ports.BalanceMovement) (ports.BalanceResult, error) {
+	return ports.BalanceResult{}, nil
+}
+
 func TestRepeat(t *testing.T) {
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	node := uuid.NewV7()
@@ -64,20 +77,22 @@ func TestRepeat(t *testing.T) {
 	openDraw := &draw.Draw{ID: uuid.NewV7(), TIR: 42, Status: draw.StatusOpen, StartsAt: now.Add(-time.Minute), ClosesAt: now.Add(time.Minute)}
 	closedDraw := &draw.Draw{ID: uuid.NewV7(), TIR: 42, Status: draw.StatusClosed, StartsAt: now.Add(-time.Minute), ClosesAt: now.Add(time.Minute)}
 
-	newRepeat := func(repository *repeatRepository, current *draw.Draw) *Repeat {
-		create := NewCreate(repository, &repeatDraws{current: current})
+	newRepeat := func(repository *repeatRepository, current *draw.Draw, balance *repeatBalance) *Repeat {
+		create := NewCreate(repository, &repeatDraws{current: current}, balance)
 		create.now = func() time.Time { return now }
 		return NewRepeat(repository, create)
 	}
 
 	t.Run("creates a new ticket in the current draw with the same bets", func(t *testing.T) {
 		repository := &repeatRepository{stored: original}
-		got, err := newRepeat(repository, openDraw).Execute(context.Background(), RepeatParams{
+		balance := &repeatBalance{}
+		result, err := newRepeat(repository, openDraw, balance).Execute(context.Background(), RepeatParams{
 			TicketID: original.ID, NodeID: node, CreatedBy: "cashier",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		got := result.Ticket
 		if got != repository.saved {
 			t.Fatal("the repeated ticket was not saved")
 		}
@@ -97,6 +112,12 @@ func TestRepeat(t *testing.T) {
 		if original.Bets[0].Nums[0] != 1 {
 			t.Fatal("the repeated ticket shares bet numbers with the original")
 		}
+		if len(balance.debits) != 1 || balance.debits[0].AmountCents != got.TotalCents() {
+			t.Fatalf("got debits %v, want one debit for %d", balance.debits, got.TotalCents())
+		}
+		if result.BalanceCents != 125000 {
+			t.Fatalf("got balance %d, want the balance reported by core", result.BalanceCents)
+		}
 	})
 
 	for _, tt := range []struct {
@@ -112,7 +133,8 @@ func TestRepeat(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			repository := &repeatRepository{stored: tt.stored}
-			_, err := newRepeat(repository, tt.current).Execute(context.Background(), RepeatParams{
+			balance := &repeatBalance{}
+			_, err := newRepeat(repository, tt.current, balance).Execute(context.Background(), RepeatParams{
 				TicketID: original.ID, NodeID: node, CreatedBy: "cashier",
 			})
 			if !errors.Is(err, tt.want) {
@@ -120,6 +142,9 @@ func TestRepeat(t *testing.T) {
 			}
 			if repository.saved != nil {
 				t.Fatal("no ticket should be saved")
+			}
+			if len(balance.debits) != 0 {
+				t.Fatal("no balance should be debited")
 			}
 		})
 	}

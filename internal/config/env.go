@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -15,10 +17,17 @@ type Config struct {
 	Environment string
 	HTTP        HttpConfig
 	Dynamodb    DynamodbConfig
+	Core        CoreConfig
 }
 
 type HttpConfig struct {
 	Address string
+}
+
+// CoreConfig points to the core service that owns the node balance.
+type CoreConfig struct {
+	BaseURL string
+	Timeout time.Duration
 }
 
 type DynamodbConfig struct {
@@ -43,6 +52,10 @@ func Load() (*Config, error) {
 			TableName: GetString("DYNAMODB_TABLE", ""),
 			Endpoint:  GetString("DYNAMODB_ENDPOINT", ""),
 		},
+		Core: CoreConfig{
+			BaseURL: GetString("CORE_BASE_URL", ""),
+			Timeout: GetDuration("CORE_TIMEOUT", 5*time.Second),
+		},
 	}, nil
 }
 
@@ -56,4 +69,18 @@ func GetString(key string, fallback string) string {
 		return fallback
 	}
 	return val
+}
+
+// GetDuration parses values such as "5s" or "500ms" and falls back when absent or invalid.
+func GetDuration(key string, fallback time.Duration) time.Duration {
+	val, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(val)
+	if err != nil {
+		log.Printf("invalid duration for %s=%q, using %s", key, val, fallback)
+		return fallback
+	}
+	return parsed
 }

@@ -26,7 +26,7 @@ type RepeatParams struct {
 	CreatedBy string
 }
 
-func (r *Repeat) Execute(ctx context.Context, params RepeatParams) (*tickets.Ticket, error) {
+func (r *Repeat) Execute(ctx context.Context, params RepeatParams) (*CreateResult, error) {
 	original, err := r.repository.GetByID(ctx, params.TicketID)
 	if err != nil {
 		return nil, err
