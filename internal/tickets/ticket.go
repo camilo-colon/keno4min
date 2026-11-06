@@ -15,7 +15,11 @@ import (
 // Game identifies this product in the events consumed by other systems.
 const Game = "keno4min"
 
-var ErrBettingClosed = errors.New("draw is not accepting tickets")
+var (
+	ErrBettingClosed          = errors.New("draw is not accepting tickets")
+	ErrTicketAlreadyCancelled = errors.New("ticket is already cancelled")
+	ErrTicketNotCancellable   = errors.New("ticket can no longer be cancelled")
+)
 
 type Bet struct {
 	Nums       []uint
@@ -45,6 +49,11 @@ type Ticket struct {
 	Balls      []uint8
 	CreatedBy  string
 	CreatedAt  time.Time
+	// PaidBy and PaidAt record the cashier who closed the ticket and when, for both
+	// cancellation and payment. Only Status tells which one happened: a cancelled
+	// ticket also fills them. Both are empty while the ticket is open.
+	PaidBy string
+	PaidAt time.Time
 }
 
 func Create(id uuid.UUID, coupon string, nodeID uuid.UUID, tir uint64, bets []Bet, createdBy string) (*Ticket, error) {
@@ -72,6 +81,36 @@ func (t *Ticket) TotalCents() int64 {
 		total += bet.ValueCents
 	}
 	return total
+}
+
+// Cancel moves a pending ticket to cancelled and records who did it.
+// The draw window is checked by the caller, since the ticket only knows its TIR.
+func (t *Ticket) Cancel(cancelledBy string, at time.Time) error {
+	if strings.TrimSpace(cancelledBy) == "" {
+		return errors.New("cancelled by is required")
+	}
+	if at.IsZero() {
+		return errors.New("cancellation time is required")
+	}
+	switch t.Status {
+	case StatusPending:
+	case StatusCancelled:
+		return ErrTicketAlreadyCancelled
+	default:
+		return ErrTicketNotCancellable
+	}
+
+	t.Status = StatusCancelled
+	t.PaidBy = cancelledBy
+	t.PaidAt = at.UTC()
+	t.Record(events.TicketCancelled{
+		BaseEvent:   common.NewBaseEvent(t.PaidAt),
+		TicketID:    t.ID,
+		Game:        Game,
+		CancelledBy: cancelledBy,
+		ValueCents:  t.TotalCents(),
+	})
+	return nil
 }
 
 func (t *Ticket) recordCreated() {

@@ -30,6 +30,8 @@ type TicketPage struct {
 type Repository interface {
 	GenerateCoupon(context.Context) (string, error)
 	Save(context.Context, *tickets.Ticket) error
+	// Update rewrites an existing ticket with its pending events.
+	Update(context.Context, *tickets.Ticket) error
 	GetByID(context.Context, uuid.UUID) (*tickets.Ticket, error)
 	// GetByIDs omits missing tickets and does not preserve the order of ids.
 	GetByIDs(context.Context, []uuid.UUID) ([]*tickets.Ticket, error)

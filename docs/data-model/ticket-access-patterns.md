@@ -10,7 +10,9 @@ copiadas al tiquete por la liquidación. La consulta por lote de IDs
 (`AP-TICKET-07`) está expuesta en `POST /tickets/lookup`. La repetición,
 expuesta en `POST /tickets/:id/repeat`, lee el original con `AP-TICKET-06` y
 guarda el nuevo tiquete con la misma escritura de la creación; no agrega ítems,
-atributos ni índices, y el tiquete repetido no registra su origen. Las demás lecturas de tiquetes y la aceptación financiera
+atributos ni índices, y el tiquete repetido no registra su origen. La anulación,
+expuesta en `POST /tickets/:id/cancel`, lee el tiquete con `AP-TICKET-06` y lo
+reescribe con `AP-TICKET-08`; consulta la sección [Anulación](#anulación). Las demás lecturas de tiquetes y la aceptación financiera
 siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y
@@ -134,6 +136,8 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | `PrizeCents` | `prizeCents` | Number, premio normal del tiquete en centavos; `0` mientras no esté liquidado o si no tiene premio |
 | `Balls` | `balls` | List de Number, bolas del draw escritas por la liquidación; ausente mientras el tiquete no esté liquidado |
 | `CreatedAt` | `createdAt` | String, UTC con formato `2006-01-02T15:04:05.000Z07:00` |
+| `PaidBy` | `paidBy` | String, `unique_name` del cajero que cerró el tiquete; ausente mientras esté abierto |
+| `PaidAt` | `paidAt` | String, UTC con el formato de `createdAt`; ausente mientras esté abierto |
 
 Los UUID se almacenan en su representación canónica con guiones. El adaptador
 usa `ticketItem`, `betItem` y `couponItem`, con etiquetas `dynamodbav`, y
@@ -244,7 +248,7 @@ lectura o condición sobre el draw al guardar. Consulta el
 `AP-TICKET-02` por `Repository.Save`, incluyendo los atributos de los índices.
 `AP-TICKET-05` está implementado por `Repository.ListByNode` y `AP-TICKET-06`
 por `Repository.GetByID`. `AP-TICKET-07` está implementado por
-`Repository.GetByIDs`. `AP-TICKET-03` y `AP-TICKET-04` describen lecturas
+`Repository.GetByIDs` y `AP-TICKET-08` por `Repository.Update`. `AP-TICKET-03` y `AP-TICKET-04` describen lecturas
 previstas que todavía no están implementadas.
 
 | ID | Operación | Acceso | Condición o consistencia |
@@ -256,6 +260,7 @@ previstas que todavía no están implementadas.
 | `AP-TICKET-05` | Listar tiquetes por nodo y rango de creación | `Query` en `GSI2`, `GSI2PK = TICKETS#NODE#<nodeId>` y rango sobre `GSI2SK` | Eventual; rango `[from, to)` y cursor completo |
 | `AP-TICKET-06` | Obtener un tiquete por ID | `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte |
 | `AP-TICKET-07` | Obtener varios tiquetes por ID | `BatchGetItem` en `TICKET#<ticketId>` / `META`, hasta 50 llaves | Lectura fuerte; error si quedan `UnprocessedKeys` |
+| `AP-TICKET-08` | Reescribir un tiquete existente y registrar sus eventos | `TransactWriteItems`, con un `Put` del ítem completo en `TICKET#<ticketId>` / `META` y uno `OUTBOX#<eventId>` por evento | `attribute_exists(PK)` en el tiquete; sin condición sobre el estado |
 
 `AP-TICKET-03` es un acceso interno previsto, no un endpoint de consulta ya
 definido. Conocer el cupón no sustituye la autorización del cajero.
@@ -415,6 +420,41 @@ descuento de saldo siguen pendientes de diseño. La autenticación, las
 comprobaciones del club y el tratamiento de idempotencia se aplazaron para
 esta etapa. El estado y horario del sorteo se verifican antes del cupón usando
 el draw canónico; esa validación no es atómica con la transacción de guardado.
+
+## Anulación
+
+`tickets/usecase.Cancel` coordina la anulación en este orden:
+
+1. Lee el tiquete con `AP-TICKET-06`. Un tiquete de otro club se informa como
+   inexistente (`404`).
+2. Exige que el `tir` del tiquete coincida con el draw actual y que ese draw
+   acepte operaciones en el instante actual (`409` si no).
+3. `Ticket.Cancel` pasa el estado de `pending` a `cancelled`, completa
+   `PaidBy`/`PaidAt` y registra `cronos.keno4min.ticket.cancelled` con
+   `ticketId`, `game`, `cancelledBy` y `valueCents`. Un tiquete ya anulado o
+   liquidado se rechaza con `409`.
+4. Reintegra el total en core con `Credit`, razón `TicketCancellation` y clave
+   `ticket:<ticketId>:cancel-credit`.
+5. Guarda con `AP-TICKET-08`. Si falla, compensa con `Debit`, razón
+   `TicketCancellationReversal` y clave `ticket:<ticketId>:cancel-credit-reversal`.
+
+El evento solo llega al outbox si el reintegro tuvo éxito, porque el guardado
+ocurre después. La respuesta es `200` con `balanceCents`, el saldo del nodo
+tras el reintegro.
+
+`PaidBy` y `PaidAt` registran quién cerró el tiquete y cuándo, tanto al anular
+como al pagar. Solo `status` indica cuál de las dos operaciones ocurrió; las
+consultas sobre `paidAt` deben filtrar también por estado.
+
+Riesgos aceptados en esta etapa:
+
+- `AP-TICKET-08` no condiciona el estado. Dos anulaciones simultáneas del mismo
+  tiquete se guardan ambas y generan dos eventos `TicketCancelled`; core
+  reintegra una sola vez por la clave de idempotencia. Los consumidores deben
+  tolerar eventos duplicados por `ticketId`.
+- Si el guardado de una de esas anulaciones falla, su compensación puede
+  revertir el reintegro de la otra. Se corrige con un ajuste manual en core.
+- La validación del draw no es atómica con el guardado.
 
 ## Límites operativos
 

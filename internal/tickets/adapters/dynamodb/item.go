@@ -27,6 +27,8 @@ type ticketItem struct {
 	Balls      []uint    `dynamodbav:"balls,omitempty"`
 	CreatedBy  string    `dynamodbav:"createdBy"`
 	CreatedAt  string    `dynamodbav:"createdAt"`
+	PaidBy     string    `dynamodbav:"paidBy,omitempty"`
+	PaidAt     string    `dynamodbav:"paidAt,omitempty"`
 }
 
 // createdAtLayout fixes the millisecond width so lexical order matches chronological order.
@@ -34,6 +36,14 @@ const createdAtLayout = "2006-01-02T15:04:05.000Z07:00"
 
 func formatCreatedAt(t time.Time) string {
 	return t.UTC().Format(createdAtLayout)
+}
+
+// formatPaidAt keeps paidAt absent while the ticket is open.
+func formatPaidAt(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return formatCreatedAt(t)
 }
 
 type betItem struct {
@@ -78,6 +88,8 @@ func toItem(ticket *tickets.Ticket) ticketItem {
 		Balls:      toBallItems(ticket.Balls),
 		CreatedBy:  ticket.CreatedBy,
 		CreatedAt:  createdAt,
+		PaidBy:     ticket.PaidBy,
+		PaidAt:     formatPaidAt(ticket.PaidAt),
 	}
 }
 
@@ -101,6 +113,13 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 		return nil, fmt.Errorf("decode creation date of ticket %s: %w", id, err)
 	}
 
+	var paidAt time.Time
+	if item.PaidAt != "" {
+		if paidAt, err = time.Parse(time.RFC3339Nano, item.PaidAt); err != nil {
+			return nil, fmt.Errorf("decode paid date of ticket %s: %w", id, err)
+		}
+	}
+
 	return &tickets.Ticket{
 		ID:         id,
 		Coupon:     item.Coupon,
@@ -112,6 +131,8 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 		Balls:      fromBallItems(item.Balls),
 		CreatedBy:  item.CreatedBy,
 		CreatedAt:  createdAt.UTC(),
+		PaidBy:     item.PaidBy,
+		PaidAt:     paidAt.UTC(),
 	}, nil
 }
 
