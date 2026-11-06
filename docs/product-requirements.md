@@ -716,7 +716,8 @@ creación están indicadas en la sección 7.3.3 y no se consideran implementadas
 ## 16. Riesgos y decisiones pendientes
 
 - Coordinar los límites técnicos configurables del endpoint con la longitud máxima admitida por el cliente y los proxies.
-- Definir la correlación del vendedor para consultas y pagos al conservar solo su nombre histórico en `CreatedBy`, sin su UUID en el tiquete.
+- Definir la correlación del vendedor para consultas y pagos al conservar solo su nombre histórico en `CreatedBy`, sin su UUID en el tiquete. Mientras tanto, `POST /tickets/:id/pay` comprueba solo el club, por lo que cualquier cajero del club vendedor puede pagar; esto se aparta temporalmente de la sección 13.
+- Incluir el jackpot en el pago cuando la liquidación lo modele; actualmente el pago entrega y acredita solo el premio normal.
 - Definir la fuente de los límites monetarios por club y la comprobación y descuento del saldo antes de completar la venta.
 - Incorporar en una etapa posterior las comprobaciones de autenticación, permisos, actividad y pertenencia del club aplazadas en la sección 7.3.3.
 - Definir el transporte, alcance y vigencia de la clave de idempotencia de creación, y la recuperación de la respuesta tras un resultado incierto.
