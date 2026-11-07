@@ -1,0 +1,165 @@
+# Construye las imágenes api y worker y las despliega en ECS dev.
+#
+# Terraform (repo cronos-infrastructure) crea los servicios y siembra la primera
+# revisión de cada task definition con ignore_changes = [task_definition]. Este
+# workflow es el dueño de la imagen en ejecución: registra revisiones nuevas a
+# partir de la última y actualiza los servicios. Nunca ejecuta Terraform.
+#
+# El rol cronos-dev-keno4min-deploy solo confía en el sub
+# repo:camilo-colon/keno4min:environment:dev, así que todo job que asuma el rol
+# declara environment: dev.
+name: deploy-dev
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# Un despliegue a la vez; el siguiente espera en vez de cancelar al que corre.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::280613358739:role/cronos-dev-keno4min-deploy
+  # El registry se fija aquí y no se pasa como output de un job: si el ID de la
+  # cuenta queda enmascarado, GitHub descarta el output entre jobs.
+  ECR_REGISTRY: 280613358739.dkr.ecr.us-east-1.amazonaws.com
+  ECS_CLUSTER: cronos-dev-cluster
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./...
+
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      image-tag: ${{ steps.tag.outputs.value }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Tag = SHA corto de 12 caracteres, igual que las imágenes existentes.
+      - id: tag
+        run: echo "value=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Los repositorios ECR tienen tags inmutables: si el tag ya existe (re-run
+      # del mismo commit), se omite el push en vez de fallar.
+      - id: exists
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          for target in api worker; do
+            count=$(aws ecr batch-get-image \
+              --repository-name "cronos/keno4min-${target}" \
+              --image-ids imageTag="${TAG}" \
+              --query 'length(images)' --output text)
+            if [ "${count}" -gt 0 ]; then
+              echo "${target}=true" >> "$GITHUB_OUTPUT"
+              echo "cronos/keno4min-${target}:${TAG} ya existe, se omite el push."
+            else
+              echo "${target}=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - name: Build and push api
+        if: steps.exists.outputs.api != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: api
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ env.ECR_REGISTRY }}/cronos/keno4min-api:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build and push worker
+        if: steps.exists.outputs.worker != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: worker
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ env.ECR_REGISTRY }}/cronos/keno4min-worker:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: cronos-dev-keno4min-api
+            family: cronos-dev-keno4min-api
+            container: api
+            repository: cronos/keno4min-api
+          - service: cronos-dev-keno4min-worker
+            family: cronos-dev-keno4min-worker
+            container: worker
+            repository: cronos/keno4min-worker
+    name: deploy (${{ matrix.container }})
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Última revisión activa de la familia, con sus tags fusionados para que
+      # la revisión nueva los conserve. El rol solo permite ecs:TagResource como
+      # parte de RegisterTaskDefinition.
+      - name: Download current task definition
+        env:
+          FAMILY: ${{ matrix.family }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${FAMILY}" \
+            --include TAGS \
+            --output json \
+            | jq '.taskDefinition + (if (.tags // []) | length > 0 then {tags: .tags} else {} end)' \
+            > "${RUNNER_TEMP}/task-definition.json"
+
+      - id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ runner.temp }}/task-definition.json
+          container-name: ${{ matrix.container }}
+          image: ${{ env.ECR_REGISTRY }}/${{ matrix.repository }}:${{ needs.build.outputs.image-tag }}
+
+      - uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ matrix.service }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
