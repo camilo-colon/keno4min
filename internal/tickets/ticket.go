@@ -19,6 +19,8 @@ var (
 	ErrBettingClosed          = errors.New("draw is not accepting tickets")
 	ErrTicketAlreadyCancelled = errors.New("ticket is already cancelled")
 	ErrTicketNotCancellable   = errors.New("ticket can no longer be cancelled")
+	ErrTicketAlreadyPaid      = errors.New("ticket is already paid")
+	ErrTicketNotPayable       = errors.New("ticket has no prize to pay")
 )
 
 type Bet struct {
@@ -109,6 +111,40 @@ func (t *Ticket) Cancel(cancelledBy string, at time.Time) error {
 		Game:        Game,
 		CancelledBy: cancelledBy,
 		ValueCents:  t.TotalCents(),
+	})
+	return nil
+}
+
+// Pay moves a winning ticket to paid and records who handed over the prize.
+// Ownership is checked by the caller; the jackpot is not part of the prize yet.
+func (t *Ticket) Pay(paidBy string, at time.Time) error {
+	if strings.TrimSpace(paidBy) == "" {
+		return errors.New("paid by is required")
+	}
+	if at.IsZero() {
+		return errors.New("payment time is required")
+	}
+	switch t.Status {
+	case StatusWinning:
+	case StatusPaid:
+		return ErrTicketAlreadyPaid
+	default:
+		return ErrTicketNotPayable
+	}
+	// A winning ticket always carries a prize; a zero one means corrupt settlement data.
+	if t.PrizeCents <= 0 {
+		return ErrTicketNotPayable
+	}
+
+	t.Status = StatusPaid
+	t.PaidBy = paidBy
+	t.PaidAt = at.UTC()
+	t.Record(events.TicketPaid{
+		BaseEvent:  common.NewBaseEvent(t.PaidAt),
+		TicketID:   t.ID,
+		Game:       Game,
+		PaidBy:     paidBy,
+		PrizeCents: t.PrizeCents,
 	})
 	return nil
 }

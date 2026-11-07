@@ -22,63 +22,49 @@ El servicio utiliza Go y Fiber v3. La base actual incluye configuración mediant
 go run ./cmd/api
 ```
 
-La configuración usa variables de entorno; consulta [`.env.example`](.env.example) para ver los valores disponibles. El servidor escucha en `:8080` por defecto.
+El servidor escucha en `:8080` por defecto; consulta [Configuración](#configuración).
 
-## AWS y DynamoDB
+## Configuración
 
-La tabla, sus índices y los permisos IAM se administran en el repositorio
-central de infraestructura. El esquema requerido de `GSI1` y `GSI2` se
-documenta en el
+La configuración se lee de variables de entorno (o de un `.env` opcional en
+desarrollo). La tabla, las colas, sus índices y los permisos IAM se
+administran en el repositorio central de infraestructura, que inyecta estos
+valores en ECS. El esquema requerido de `GSI1` y `GSI2` se documenta en el
 [modelo de tiquetes](docs/data-model/ticket-access-patterns.md#índices-de-consulta).
-Keno4min recibe únicamente la configuración de runtime:
 
-- `AWS_REGION`: región donde está desplegada la tabla.
-- `DYNAMODB_TABLE_NAME`: nombre físico de la tabla asignada al entorno.
-- `DYNAMODB_ENDPOINT_URL`: endpoint alternativo opcional, permitido solamente
-  en desarrollo y pruebas.
+| Variable | Uso | Valor por defecto |
+| --- | --- | --- |
+| `HTTP_ADDRESS` | Dirección de escucha de la API. | `:8080` |
+| `ENVIRONMENT` | Entorno de despliegue. Debe ser igual al entorno de infraestructura (`dev`), porque el worker construye con él los nombres de las colas, por ejemplo `cronos-dev-keno4min-node-create_on_node_created`. | `development` |
+| `DYNAMODB_TABLE` | Nombre físico de la tabla asignada al entorno. | — |
+| `AWS_REGION` | Región de la tabla y las colas; la lee la cadena estándar del AWS SDK. | — |
+| `CORE_BASE_URL` | URL base del servicio core, dueño del saldo del nodo. Obligatoria para la API. | — |
+| `CORE_TIMEOUT` | Timeout de las llamadas a core, en formato Go (`5s`, `500ms`). | `5s` |
+| `DYNAMODB_ENDPOINT` | Endpoint alternativo opcional para desarrollo y pruebas. | — |
+| `APP_NAME` | Nombre de la aplicación Fiber. | `Cronos Keno4min API` |
 
-En `development` y `test`, la región y tabla usan `us-east-1` y
-`keno4min-local` como valores predeterminados. En los demás entornos ambos
-valores son obligatorios y los endpoints personalizados se rechazan.
+Consulta [`.env.example`](.env.example) para un ejemplo local. Las credenciales
+no forman parte de la configuración propia: el AWS SDK usa su cadena estándar,
+incluidos perfiles locales y el rol IAM de la tarea en ECS.
 
-Las credenciales no forman parte de la configuración propia de la aplicación.
-El cliente AWS utiliza la cadena estándar de
-credenciales del SDK, incluidos perfiles locales y roles IAM del workload.
-Esta configuración inicial no realiza conexiones a AWS ni comprueba la
-existencia de la tabla.
+## Endpoints
 
-El cliente se construye mediante `internal/platform/awsclient`. La fábrica
-carga la cadena estándar de configuración del AWS SDK, aplica la región y, en
-entornos locales, configura el endpoint específico de DynamoDB. Crear el cliente
-no realiza solicitudes a DynamoDB. `cmd/api` lo conecta al caso de uso y sus adaptadores:
+Todas las rutas se publican bajo el prefijo `/keno4min`, porque el ALB interno
+compartido y API Gateway reenvían la ruta completa sin reescribirla.
 
-```go
-// draw: internal/draw
-// drawdynamodb: internal/draw/dynamodb
-// drawhttp: internal/draw/http
-client, err := awsclient.NewDynamoDB(ctx, cfg.AWS, cfg.DynamoDB)
-if err != nil {
-    // El proceso debe terminar porque la configuración del SDK es inválida.
-}
+- `GET /keno4min/health`: liveness check del target group del ALB. Responde
+  `200` con `{"status":"ok"}`, no requiere `Authorization` y no consulta
+  DynamoDB ni core.
 
-store := drawdynamodb.NewStore(client, cfg.DynamoDB.TableName)
-query := draw.NewGetByID(store)
-httpServer.App().Get("/api/v1/draws/:id", drawhttp.NewHandler(query))
-```
+Las demás rutas requieren `Authorization: Bearer <token>` y responden `401`
+sin él:
 
-El cliente se crea una sola vez por proceso y se comparte mediante inyección de
-dependencias. La consulta requiere `dynamodb:GetItem` sobre la tabla configurada.
-
-## Endpoints iniciales
-
-- `GET /`: identidad del servicio.
-- `GET /health/live`: liveness probe.
-- `GET /health/ready`: readiness probe.
-- `GET /api/v1`: raíz de la API v1.
-- `GET /api/v1/draws/{id}`: sorteo por ID, mediante una lectura fuerte.
-  Retorna `400` para un ID en blanco o con codificación URL inválida, `404` si no existe y `500` ante errores
-  internos. Consulta el [contrato de almacenamiento](docs/data-model/draw-access-patterns.md#contrato-implementado-para-la-consulta-por-id)
-  para los ítems que deben producir las tareas del workflow.
+- `GET /keno4min/draws/runtime`: estado actual del ciclo de sorteos.
+- `GET /keno4min/tickets/create`, `POST /keno4min/tickets/lookup`,
+  `GET /keno4min/tickets`, `GET /keno4min/tickets/{id}`,
+  `POST /keno4min/tickets/{id}/repeat`, `POST /keno4min/tickets/{id}/cancel`,
+  `POST /keno4min/tickets/{id}/pay`: venta, consulta, repetición, anulación y
+  pago de tiquetes.
 
 ## Verificación
 

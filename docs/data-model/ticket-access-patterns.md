@@ -12,7 +12,9 @@ expuesta en `POST /tickets/:id/repeat`, lee el original con `AP-TICKET-06` y
 guarda el nuevo tiquete con la misma escritura de la creación; no agrega ítems,
 atributos ni índices, y el tiquete repetido no registra su origen. La anulación,
 expuesta en `POST /tickets/:id/cancel`, lee el tiquete con `AP-TICKET-06` y lo
-reescribe con `AP-TICKET-08`; consulta la sección [Anulación](#anulación). Las demás lecturas de tiquetes y la aceptación financiera
+reescribe con `AP-TICKET-08`; consulta la sección [Anulación](#anulación). El
+pago, expuesto en `POST /tickets/:id/pay`, usa los mismos accesos; consulta la
+sección [Pago](#pago). Las demás lecturas de tiquetes y la aceptación financiera
 siguen pendientes. La creación valida
 estado y horario contra el draw canónico antes del cupón.
 El guardado incluye las claves para consultar por TIR y por nodo y fecha, y
@@ -455,6 +457,44 @@ Riesgos aceptados en esta etapa:
 - Si el guardado de una de esas anulaciones falla, su compensación puede
   revertir el reintegro de la otra. Se corrige con un ajuste manual en core.
 - La validación del draw no es atómica con el guardado.
+
+## Pago
+
+`tickets/usecase.Pay` coordina el pago de un premio en este orden:
+
+1. Lee el tiquete con `AP-TICKET-06`. Un tiquete de otro club se informa como
+   inexistente (`404`).
+2. `Ticket.Pay` pasa el estado de `winning` a `paid`, completa `PaidBy`/`PaidAt`
+   y registra `cronos.keno4min.ticket.paid` con `ticketId`, `game`, `paidBy` y
+   `prizeCents`. Un tiquete ya pagado responde `409` (`ticket is already paid`);
+   uno pendiente, perdido, anulado o ganador sin premio responde `409`
+   (`ticket has no prize to pay`).
+3. Acredita `PrizeCents` en core con `Credit`, razón `TicketPayment` y clave
+   `ticket:<ticketId>:pay-credit`.
+4. Guarda con `AP-TICKET-08`. Si falla, compensa con `Debit`, razón
+   `TicketPaymentReversal` y clave `ticket:<ticketId>:pay-credit-reversal`.
+
+A diferencia de la anulación, el pago no consulta el draw: un tiquete liquidado
+se puede pagar en cualquier sorteo posterior. La respuesta es `200` con
+`prizeCents`, el valor que el cajero entrega en efectivo, y `balanceCents`, el
+saldo del nodo tras el crédito. Core no disponible responde `503`.
+
+Desviaciones aceptadas en esta etapa respecto del PRD, sección 13:
+
+- La pertenencia se comprueba solo por club (`NodeID`): cualquier cajero del
+  club vendedor puede pagar el tiquete. El PRD exige al cajero vendedor, cuya
+  correlación sigue pendiente (sección 16).
+- Solo se paga el premio normal (`PrizeCents`). El tiquete no modela el
+  jackpot y la liquidación no lo calcula.
+- Aplican los mismos riesgos de concurrencia de la anulación, porque
+  `AP-TICKET-08` no condiciona el estado. Dos pagos simultáneos del mismo
+  tiquete se guardan ambos y generan dos eventos `TicketPaid`; core acredita
+  una sola vez por la clave de idempotencia. Los consumidores deben tolerar
+  eventos duplicados por `ticketId`.
+- Condicionar `AP-TICKET-08` a `status = winning` no basta por sí solo: la
+  solicitud perdedora compensaría con `Debit` el único crédito, que pertenece a
+  la ganadora. Una corrección futura debe omitir la compensación ante un
+  conflicto de estado o mover el crédito a un consumidor del outbox.
 
 ## Límites operativos
 

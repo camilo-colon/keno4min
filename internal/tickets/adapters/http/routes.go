@@ -9,10 +9,11 @@ type Routes struct {
 	lookupTickets *LookupTicketsHandler
 	repeatTicket  *RepeatTicketHandler
 	cancelTicket  *CancelTicketHandler
+	payTicket     *PayTicketHandler
 }
 
-func NewRoutes(createTicket *CreateTicketHandler, listTickets *ListTicketsHandler, getTicket *GetTicketHandler, lookupTickets *LookupTicketsHandler, repeatTicket *RepeatTicketHandler, cancelTicket *CancelTicketHandler) *Routes {
-	return &Routes{createTicket: createTicket, listTickets: listTickets, getTicket: getTicket, lookupTickets: lookupTickets, repeatTicket: repeatTicket, cancelTicket: cancelTicket}
+func NewRoutes(createTicket *CreateTicketHandler, listTickets *ListTicketsHandler, getTicket *GetTicketHandler, lookupTickets *LookupTicketsHandler, repeatTicket *RepeatTicketHandler, cancelTicket *CancelTicketHandler, payTicket *PayTicketHandler) *Routes {
+	return &Routes{createTicket: createTicket, listTickets: listTickets, getTicket: getTicket, lookupTickets: lookupTickets, repeatTicket: repeatTicket, cancelTicket: cancelTicket, payTicket: payTicket}
 }
 
 func (r *Routes) Register(router fiber.Router) {
@@ -22,4 +23,5 @@ func (r *Routes) Register(router fiber.Router) {
 	router.Get("/tickets/:id", r.getTicket.Handle)
 	router.Post("/tickets/:id/repeat", r.repeatTicket.Handle)
 	router.Post("/tickets/:id/cancel", r.cancelTicket.Handle)
+	router.Post("/tickets/:id/pay", r.payTicket.Handle)
 }

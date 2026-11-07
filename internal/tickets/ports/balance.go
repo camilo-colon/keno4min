@@ -14,6 +14,9 @@ const (
 
 	ReasonTicketCancellation         BalanceReason = "TicketCancellation"
 	ReasonTicketCancellationReversal BalanceReason = "TicketCancellationReversal"
+
+	ReasonTicketPayment         BalanceReason = "TicketPayment"
+	ReasonTicketPaymentReversal BalanceReason = "TicketPaymentReversal"
 )
 
 // BalanceMovement is a debit or credit over the balance of a node.
