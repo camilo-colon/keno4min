@@ -20,6 +20,7 @@ type ConsumerSQS struct {
 	deserializer *DomainEventJSONDeserializer
 	config       *config.Config
 	sqsClient    *sqs.Client
+	queueURL     string
 }
 
 func NewConsumerSQS(queueName string, handler Handler, deserializer *DomainEventJSONDeserializer, sqsClient *sqs.Client, config *config.Config) *ConsumerSQS {
@@ -32,10 +33,21 @@ func NewConsumerSQS(queueName string, handler Handler, deserializer *DomainEvent
 	}
 }
 
-func (c ConsumerSQS) Run(ctx context.Context) error {
+// Resolve looks up the queue URL. It must succeed before Run is called.
+func (c *ConsumerSQS) Resolve(ctx context.Context) error {
 	queueURL, err := c.GetQueueUrl(ctx)
 	if err != nil {
 		return err
+	}
+	c.queueURL = queueURL
+	return nil
+}
+
+// Run polls the queue resolved by Resolve until ctx is cancelled or receiving fails.
+func (c *ConsumerSQS) Run(ctx context.Context) error {
+	queueURL := c.queueURL
+	if queueURL == "" {
+		return fmt.Errorf("queue %q was not resolved", c.queueName)
 	}
 	for {
 		if err := ctx.Err(); err != nil {
