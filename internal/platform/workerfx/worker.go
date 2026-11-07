@@ -45,14 +45,6 @@ func (w Worker) Run(lc fx.Lifecycle) {
 	finished := make(chan struct{})
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			// Resolve every queue before polling so a missing queue fails fx
-			// startup and the process exits non-zero instead of running degraded.
-			for _, consumer := range w.consumers {
-				if err := consumer.Resolve(ctx); err != nil {
-					cancel()
-					return fmt.Errorf("consumer %s: %w", consumer.queueName, err)
-				}
-			}
 			go func() {
 				defer close(finished)
 				w.Start(ctxCancel)
