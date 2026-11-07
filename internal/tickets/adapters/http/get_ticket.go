@@ -51,6 +51,8 @@ type getTicketResponse struct {
 	Balls      []int                  `json:"balls"`
 	CreatedBy  string                 `json:"createdBy"`
 	CreatedAt  time.Time              `json:"createdAt"`
+	PaidBy     string                 `json:"paidBy,omitempty"`
+	PaidAt     time.Time              `json:"paidAt,omitzero"`
 }
 
 type getTicketBetResponse struct {
@@ -62,6 +64,7 @@ func toGetTicketResponse(ticket *tickets.Ticket) getTicketResponse {
 	result := getTicketResponse{
 		ID: ticket.ID.String(), Coupon: ticket.Coupon, NodeID: ticket.NodeID.String(),
 		TIR: ticket.TIR, Status: ticket.Status, PrizeCents: ticket.PrizeCents, CreatedBy: ticket.CreatedBy, CreatedAt: ticket.CreatedAt,
+		PaidBy: ticket.PaidBy, PaidAt: ticket.PaidAt,
 		Bets:  make([]getTicketBetResponse, len(ticket.Bets)),
 		Balls: make([]int, len(ticket.Balls)),
 	}

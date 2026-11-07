@@ -22,6 +22,7 @@ var Module = fx.Module(
 		usecase.NewRepeat,
 		usecase.NewCancel,
 		usecase.NewPay,
+		usecase.NewPayAll,
 		http.NewCreateTicketHandler,
 		http.NewListTicketsHandler,
 		http.NewGetTicketHandler,
@@ -29,6 +30,7 @@ var Module = fx.Module(
 		http.NewRepeatTicketHandler,
 		http.NewCancelTicketHandler,
 		http.NewPayTicketHandler,
+		http.NewPayAllTicketsHandler,
 		fx.Annotate(
 			http.NewRoutes,
 			fx.As(new(serverfx.Route)),

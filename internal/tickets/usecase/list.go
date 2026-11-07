@@ -20,11 +20,8 @@ func NewList(repository ports.Repository) *List {
 }
 
 func (l *List) Execute(ctx context.Context, params ports.ListParams) (ports.TicketPage, error) {
-	if params.From.IsZero() || params.To.IsZero() || !params.From.Before(params.To) {
-		return ports.TicketPage{}, fmt.Errorf("%w: from must be before to", ErrInvalidListParams)
-	}
-	if params.From.Nanosecond()%int(time.Millisecond) != 0 || params.To.Nanosecond()%int(time.Millisecond) != 0 {
-		return ports.TicketPage{}, fmt.Errorf("%w: dates must have at most millisecond precision", ErrInvalidListParams)
+	if err := validateDateRange(params.From, params.To); err != nil {
+		return ports.TicketPage{}, fmt.Errorf("%w: %w", ErrInvalidListParams, err)
 	}
 	if params.Limit == 0 {
 		params.Limit = 50
@@ -33,4 +30,15 @@ func (l *List) Execute(ctx context.Context, params ports.ListParams) (ports.Tick
 		return ports.TicketPage{}, fmt.Errorf("%w: limit must be between 1 and 100", ErrInvalidListParams)
 	}
 	return l.repository.ListByNode(ctx, params)
+}
+
+// validateDateRange checks a [from, to) range as the tickets index stores it.
+func validateDateRange(from, to time.Time) error {
+	if from.IsZero() || to.IsZero() || !from.Before(to) {
+		return errors.New("from must be before to")
+	}
+	if from.Nanosecond()%int(time.Millisecond) != 0 || to.Nanosecond()%int(time.Millisecond) != 0 {
+		return errors.New("dates must have at most millisecond precision")
+	}
+	return nil
 }

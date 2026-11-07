@@ -66,12 +66,15 @@ type listTicketResponse struct {
 	PrizeCents int64          `json:"prizeCents"`
 	CreatedBy  string         `json:"createdBy"`
 	CreatedAt  time.Time      `json:"createdAt"`
+	PaidBy     string         `json:"paidBy,omitempty"`
+	PaidAt     time.Time      `json:"paidAt,omitzero"`
 }
 
 func toListTicketResponse(ticket *tickets.Ticket) listTicketResponse {
 	result := listTicketResponse{
 		ID: ticket.ID.String(), Coupon: ticket.Coupon,
 		TIR: ticket.TIR, Status: ticket.Status, PrizeCents: ticket.PrizeCents, CreatedBy: ticket.CreatedBy, CreatedAt: ticket.CreatedAt,
+		PaidBy: ticket.PaidBy, PaidAt: ticket.PaidAt,
 	}
 	for _, bet := range ticket.Bets {
 		result.TotalCents += bet.ValueCents

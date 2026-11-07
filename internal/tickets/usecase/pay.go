@@ -11,11 +11,6 @@ import (
 	"github.com/cronos/keno4min/internal/tickets/ports"
 )
 
-// Pay closes a winning ticket and credits its prize to the node, since the cashier
-// handed it over in cash.
-//
-// Ownership is checked by node only: any cashier of the selling club can pay. The PRD
-// requires the selling cashier, which stays pending until the ticket can identify them.
 type Pay struct {
 	repository ports.Repository
 	balance    ports.BalanceGateway
@@ -32,7 +27,6 @@ type PayParams struct {
 	PaidBy   string
 }
 
-// PayResult carries the paid prize and the node balance after the credit.
 type PayResult struct {
 	PrizeCents   int64
 	BalanceCents int64
@@ -43,12 +37,15 @@ func (p *Pay) Execute(ctx context.Context, params PayParams) (*PayResult, error)
 	if err != nil {
 		return nil, err
 	}
-	// A ticket of another club is reported as missing so its existence is not revealed.
 	if ticket.NodeID != params.NodeID {
 		return nil, fmt.Errorf("%w: %s", ports.ErrTicketNotFound, params.TicketID)
 	}
+	return p.payTicket(ctx, ticket, params.PaidBy)
+}
 
-	if err := ticket.Pay(params.PaidBy, p.now().UTC()); err != nil {
+// payTicket pays an already loaded ticket; the caller has checked it belongs to the node.
+func (p *Pay) payTicket(ctx context.Context, ticket *tickets.Ticket, paidBy string) (*PayResult, error) {
+	if err := ticket.Pay(paidBy, p.now().UTC()); err != nil {
 		return nil, err
 	}
 	credit, err := p.balance.Credit(ctx, paymentCredit(ticket))
