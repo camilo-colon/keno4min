@@ -18,6 +18,6 @@ type RouteParams struct {
 
 func RegisterRoutes(params RouteParams) {
 	for _, route := range params.Routes {
-		route.Register(params.Server.app)
+		route.Register(params.Server.api)
 	}
 }
