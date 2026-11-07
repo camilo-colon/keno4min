@@ -3,12 +3,16 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"uuid"
 
 	"github.com/cronos/keno4min/internal/tickets"
 	"github.com/cronos/keno4min/internal/tickets/ports"
 )
+
+// maxLookupIDs matches the DynamoDB BatchGetItem limit of 100 keys per request.
+const maxLookupIDs = 100
 
 var ErrInvalidLookupParams = errors.New("invalid ticket lookup")
 
@@ -27,6 +31,9 @@ type LookupParams struct {
 
 func (l *Lookup) Execute(ctx context.Context, params LookupParams) ([]*tickets.Ticket, error) {
 	ids := unique(params.TicketIDs)
+	if len(ids) == 0 || len(ids) > maxLookupIDs {
+		return nil, fmt.Errorf("%w: ids must contain between 1 and %d tickets", ErrInvalidLookupParams, maxLookupIDs)
+	}
 	found, err := l.repository.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, err

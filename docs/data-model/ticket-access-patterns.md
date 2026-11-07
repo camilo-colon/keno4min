@@ -261,7 +261,7 @@ previstas que todavía no están implementadas.
 | `AP-TICKET-04` | Listar tiquetes por TIR | `Query` en `GSI1`, `GSI1PK = TICKETS#TIR#<tir>` | Eventual; paginar hasta agotar resultados |
 | `AP-TICKET-05` | Listar tiquetes por nodo y rango de creación | `Query` en `GSI2`, `GSI2PK = TICKETS#NODE#<nodeId>` y rango sobre `GSI2SK` | Eventual; rango `[from, to)` y cursor completo |
 | `AP-TICKET-06` | Obtener un tiquete por ID | `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte |
-| `AP-TICKET-07` | Obtener varios tiquetes por ID | `BatchGetItem` en `TICKET#<ticketId>` / `META`, hasta 50 llaves | Lectura fuerte; error si quedan `UnprocessedKeys` |
+| `AP-TICKET-07` | Obtener varios tiquetes por ID | `BatchGetItem` en `TICKET#<ticketId>` / `META`, hasta 100 llaves | Lectura fuerte; error si quedan `UnprocessedKeys` |
 | `AP-TICKET-08` | Reescribir un tiquete existente y registrar sus eventos | `TransactWriteItems`, con un `Put` del ítem completo en `TICKET#<ticketId>` / `META` y uno `OUTBOX#<eventId>` por evento | `attribute_exists(PK)` en el tiquete; sin condición sobre el estado |
 
 `AP-TICKET-03` es un acceso interno previsto, no un endpoint de consulta ya
@@ -300,7 +300,7 @@ calculado a partir de las apuestas.
 los tiquetes que ya muestran. Un body inválido o un ID que no es UUID responde `400`.
 
 El [caso de uso `tickets/usecase.Lookup`](../../internal/tickets/usecase/lookup.go)
-descarta los IDs repetidos y exige entre 1 y 50 IDs distintos; fuera de ese
+descarta los IDs repetidos y exige entre 1 y 100 IDs distintos; fuera de ese
 rango devuelve `ErrInvalidLookupParams` y el handler responde `400`. Los
 tiquetes inexistentes y los de otro club se omiten de la respuesta, sin
 distinguirlos, para no revelar que el ID existe.
@@ -309,7 +309,7 @@ distinguirlos, para no revelar que el ID existe.
 `BatchGetItem` y lectura fuerte. No conserva el orden de los IDs. Si DynamoDB
 devuelve `UnprocessedKeys`, el método falla en lugar de responder sin esos
 tiquetes, porque el cliente los interpretaría como inexistentes; no reintenta y
-el handler responde `500`. Con 50 llaves la respuesta no alcanza el límite de
+el handler responde `500`. Con 100 llaves la respuesta no alcanza el límite de
 16 MB, por lo que esa condición solo se espera ante limitación de capacidad.
 
 La respuesta es `{"items": [{"id", "status", "prizeCents"}]}`.
