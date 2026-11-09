@@ -70,7 +70,7 @@ func (c *Client) send(ctx context.Context, kind string, movement ports.BalanceMo
 		return ports.BalanceResult{}, fmt.Errorf("core %s: encode request: %w", kind, err)
 	}
 
-	url := fmt.Sprintf("%s/nodes/%s/balance/%s", c.baseURL, movement.NodeID, kind)
+	url := fmt.Sprintf("%s/nodes/%s/external-movements/%s", c.baseURL, movement.NodeID, kind)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return ports.BalanceResult{}, fmt.Errorf("core %s: build request: %w", kind, err)
