@@ -44,7 +44,7 @@ func Load() (*Config, error) {
 
 	return &Config{
 		AppName:     GetString("APP_NAME", "Cronos Keno4min API"),
-		Environment: GetString("ENVIRONMENT", "development"),
+		Environment: GetString("ENVIRONMENT", "dev"),
 		HTTP: HttpConfig{
 			Address: GetString("HTTP_ADDRESS", ":8080"),
 		},
