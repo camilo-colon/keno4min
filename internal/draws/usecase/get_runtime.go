@@ -66,10 +66,11 @@ func (g *GetRuntime) Execute(ctx context.Context) (*GetRuntimeResult, error) {
 		History:    history,
 	}
 
-	// tir, balls e idv salen siempre del mismo resultado. Mientras el motor no
-	// guarde el sorteo que acaba de cerrar, tir no avanza y el cliente reintenta.
+	if t2 > 0 && runtime.LatestResult != nil {
+		result.Tir = runtime.LatestResult.Tir
+	}
+
 	if last := runtime.LatestResult; last != nil {
-		result.Tir = last.Tir
 		result.Balls = last.Balls
 		result.Idv = last.Idv
 	}
