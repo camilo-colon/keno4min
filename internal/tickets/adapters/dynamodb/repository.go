@@ -82,7 +82,7 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 		return fmt.Errorf("marshal ticket %s: %w", ticket.ID, err)
 	}
 	coupon, err := attributevalue.MarshalMap(couponItem{
-		PK:       "COUPON#" + ticket.Coupon,
+		PK:       couponPK(ticket.Coupon),
 		SK:       "META",
 		TicketID: ticket.ID.String(),
 	})
@@ -177,6 +177,31 @@ func (r Repository) GetByID(ctx context.Context, id uuid.UUID) (*tickets.Ticket,
 		return nil, fmt.Errorf("unmarshal ticket %s: %w", id, err)
 	}
 	return fromItem(item)
+}
+
+// GetByCoupon resolves the coupon reservation written by Save and then reads its ticket.
+func (r Repository) GetByCoupon(ctx context.Context, coupon string) (*tickets.Ticket, error) {
+	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      aws.String(r.tableName),
+		Key:            couponKey(coupon),
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get coupon %s: %w", coupon, err)
+	}
+	if len(output.Item) == 0 {
+		return nil, fmt.Errorf("%w: coupon %s", ports.ErrTicketNotFound, coupon)
+	}
+
+	var item couponItem
+	if err := attributevalue.UnmarshalMap(output.Item, &item); err != nil {
+		return nil, fmt.Errorf("unmarshal coupon %s: %w", coupon, err)
+	}
+	ticketID, err := uuid.Parse(item.TicketID)
+	if err != nil {
+		return nil, fmt.Errorf("decode ticket id of coupon %s: %w", coupon, err)
+	}
+	return r.GetByID(ctx, ticketID)
 }
 
 func (r Repository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*tickets.Ticket, error) {

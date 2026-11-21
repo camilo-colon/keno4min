@@ -79,6 +79,17 @@ func ticketKey(id uuid.UUID) map[string]types.AttributeValue {
 	}
 }
 
+func couponPK(coupon string) string {
+	return "COUPON#" + coupon
+}
+
+func couponKey(coupon string) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"PK": &types.AttributeValueMemberS{Value: couponPK(coupon)},
+		"SK": &types.AttributeValueMemberS{Value: "META"},
+	}
+}
+
 func toItem(ticket *tickets.Ticket) ticketItem {
 	bets := make([]betItem, len(ticket.Bets))
 	for i, bet := range ticket.Bets {
