@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/cronos/keno4min/internal/config"
 	"github.com/cronos/keno4min/internal/draws/drawsfx"
+	"github.com/cronos/keno4min/internal/nodes/nodesfx"
 	"github.com/cronos/keno4min/internal/platform/awsfx"
 	dynamodbfx "github.com/cronos/keno4min/internal/platform/awsfx/dynamodbfx"
 	"github.com/cronos/keno4min/internal/platform/serverfx"
@@ -20,6 +21,7 @@ func apiModule() fx.Option {
 		awsfx.Module,
 		dynamodbfx.Module,
 		drawsfx.Module,
+		nodesfx.RepositoryModule,
 		ticketsfx.Module,
 		serverfx.Module,
 	)

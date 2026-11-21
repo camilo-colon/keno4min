@@ -89,6 +89,10 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 	if err != nil {
 		return fmt.Errorf("marshal coupon for ticket %s: %w", ticket.ID, err)
 	}
+	betsRecord, err := attributevalue.MarshalMap(toBetsRecordItem(ticket))
+	if err != nil {
+		return fmt.Errorf("marshal bets record for ticket %s: %w", ticket.ID, err)
+	}
 
 	transactItems := []types.TransactWriteItem{
 		{Put: &types.Put{
@@ -99,6 +103,11 @@ func (r Repository) Save(ctx context.Context, ticket *tickets.Ticket) error {
 		{Put: &types.Put{
 			TableName:           aws.String(r.tableName),
 			Item:                coupon,
+			ConditionExpression: aws.String("attribute_not_exists(PK)"),
+		}},
+		{Put: &types.Put{
+			TableName:           aws.String(r.tableName),
+			Item:                betsRecord,
 			ConditionExpression: aws.String("attribute_not_exists(PK)"),
 		}},
 	}
@@ -130,6 +139,12 @@ func (r Repository) Update(ctx context.Context, ticket *tickets.Ticket) error {
 		Item:                item,
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 	}}}
+	if ticket.Status == tickets.StatusCancelled {
+		transactItems = append(transactItems, types.TransactWriteItem{Delete: &types.Delete{
+			TableName: aws.String(r.tableName),
+			Key:       betsRecordKey(ticket),
+		}})
+	}
 	outboxItems, err := outbox.TransactItems(r.tableName, ticket)
 	if err != nil {
 		return fmt.Errorf("outbox for ticket %s: %w", ticket.ID, err)

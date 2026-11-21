@@ -33,6 +33,8 @@ de `GSI1`; los nodos sin padre omiten ambas claves. No se añaden ítems auxilia
 si el nodo no existe. Convierte los atributos al dominio, preservando `ParentId=nil`
 cuando no hay padre, y propaga los errores de DynamoDB, deserialización o UUID
 inválidos. El rol que realiza esta lectura necesita `dynamodb:GetItem` sobre la tabla.
+La API también la usa en cada venta, para copiar el padre del club al tiquete;
+consulta [Patrones de acceso de tiquetes](ticket-access-patterns.md#lectura-del-vendedor-y-club).
 
 `Save` realiza una única escritura condicional, sin lectura previa. Si el ítem
 existe, devuelve éxito y conserva todos sus atributos, incluso si el evento
