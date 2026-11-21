@@ -6,7 +6,9 @@ nodo y rango de creación (`AP-TICKET-05`) está implementado y expuesto en
 `GET /tickets`; el nodo se toma del claim `node_id` del token y un `nodeId`
 en la query se ignora ([ADR 0026](../adrs/0026-filtrar-el-listado-de-tiquetes-por-el-club-del-token.md)). La consulta por ID
 (`AP-TICKET-06`) está expuesta en `GET /tickets/:id` e incluye las bolas
-copiadas al tiquete por la liquidación. La consulta por lote de IDs
+copiadas al tiquete por la liquidación. La consulta por cupón
+(`AP-TICKET-03`) está expuesta en `GET /tickets/coupon/:coupon` y responde lo
+mismo que la consulta por ID. La consulta por lote de IDs
 (`AP-TICKET-07`) está expuesta en `POST /tickets/lookup`. La repetición,
 expuesta en `POST /tickets/:id/repeat`, lee el original con `AP-TICKET-06` y
 guarda el nuevo tiquete con la misma escritura de la creación; no agrega ítems,
@@ -311,8 +313,9 @@ core, Keno4min conserva el anterior.
 `AP-TICKET-02` por `Repository.Save`, incluyendo los atributos de los índices.
 `AP-TICKET-05` está implementado por `Repository.ListByNode` y `AP-TICKET-06`
 por `Repository.GetByID`. `AP-TICKET-07` está implementado por
-`Repository.GetByIDs` y `AP-TICKET-08` por `Repository.Update`. `AP-TICKET-03` y `AP-TICKET-04` describen lecturas
-previstas que todavía no están implementadas.
+`Repository.GetByIDs` y `AP-TICKET-08` por `Repository.Update`. `AP-TICKET-03`
+está implementado por `Repository.GetByCoupon`. `AP-TICKET-04` describe una
+lectura prevista que todavía no está implementada.
 
 | ID | Operación | Acceso | Condición o consistencia |
 | --- | --- | --- | --- |
@@ -325,8 +328,8 @@ previstas que todavía no están implementadas.
 | `AP-TICKET-07` | Obtener varios tiquetes por ID | `BatchGetItem` en `TICKET#<ticketId>` / `META`, hasta 100 llaves | Lectura fuerte; error si quedan `UnprocessedKeys` |
 | `AP-TICKET-08` | Reescribir un tiquete existente y registrar sus eventos | `TransactWriteItems`, con un `Put` del ítem completo en `TICKET#<ticketId>` / `META`, un `Delete` de su registro de apuestas si el tiquete queda anulado y uno `OUTBOX#<eventId>` por evento | `attribute_exists(PK)` en el tiquete; sin condición sobre el estado ni sobre el registro de apuestas |
 
-`AP-TICKET-03` es un acceso interno previsto, no un endpoint de consulta ya
-definido. Conocer el cupón no sustituye la autorización del cajero.
+Conocer el cupón no sustituye la autorización del cajero; consulta la sección
+[Consulta por cupón](#consulta-por-cupón).
 
 ## Consulta por ID
 
@@ -353,6 +356,25 @@ La respuesta tiene su propio tipo, separado del listado, y contiene los campos
 del listado más `nodeId`, `bets` y `balls`. El listado omite `nodeId`, porque
 siempre coincide con el club del token, y `bets`; conserva `totalCents`,
 calculado a partir de las apuestas.
+
+## Consulta por cupón
+
+`GET /tickets/coupon/:coupon` recibe el cupón completo en la ruta, con sus ceros
+iniciales, y toma el club del claim `node_id` del token. El cupón no se valida
+ni se normaliza: uno que no coincide con ninguna reserva responde `404`.
+
+`Repository.GetByCoupon` implementa `AP-TICKET-03`: lee con lectura fuerte la
+reserva `COUPON#<coupon>` / `META` que escribe `AP-TICKET-02` y luego el
+tiquete con `Repository.GetByID`. Son dos `GetItem`, sin `Scan`, `Query` ni
+índices. Si la reserva no existe devuelve `ports.ErrTicketNotFound`. Como las
+reservas no se eliminan al anular, un tiquete anulado sigue encontrándose por su
+cupón.
+
+El [caso de uso `tickets/usecase.GetByCoupon`](../../internal/tickets/usecase/get_by_coupon.go)
+compara `Ticket.NodeID` con el club del token, igual que `usecase.Get`. Un
+tiquete de otro club devuelve `ErrTicketNotFound` y el handler responde `404`
+para no revelar que el cupón existe. La respuesta usa el mismo tipo que
+`GET /tickets/:id`.
 
 ## Consulta por lote
 

@@ -33,6 +33,7 @@ type Repository interface {
 	// Update rewrites an existing ticket with its pending events.
 	Update(context.Context, *tickets.Ticket) error
 	GetByID(context.Context, uuid.UUID) (*tickets.Ticket, error)
+	GetByCoupon(context.Context, string) (*tickets.Ticket, error)
 	// GetByIDs omits missing tickets and does not preserve the order of ids.
 	GetByIDs(context.Context, []uuid.UUID) ([]*tickets.Ticket, error)
 	ListByNode(context.Context, ListParams) (TicketPage, error)
