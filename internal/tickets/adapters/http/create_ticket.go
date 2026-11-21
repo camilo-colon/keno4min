@@ -43,6 +43,9 @@ func (h *CreateTicketHandler) Handle(ctx fiber.Ctx) error {
 	if errors.Is(err, usecase.ErrDrawUnavailable) {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "current draw is unavailable"})
 	}
+	if errors.Is(err, usecase.ErrNodeNotFound) || errors.Is(err, usecase.ErrNodeWithoutAdmin) {
+		return ctx.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "node cannot sell tickets"})
+	}
 	if errors.Is(err, ports.ErrInsufficientBalance) {
 		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "insufficient node balance"})
 	}

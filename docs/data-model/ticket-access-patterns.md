@@ -30,7 +30,7 @@ La decisión vigente está en el [ADR 0019](../adrs/0019-generar-identificador-d
 La entidad es `Ticket` y cada elemento de `Bets` es una apuesta `Bet`. Sus
 declaraciones y los valores de `Status` están implementados en
 [`internal/tickets/ticket.go`](../../internal/tickets/ticket.go), que es la
-referencia para los tipos Go. `Create(id, coupon, nodeID, tir, bets, createdBy)`
+referencia para los tipos Go. `Create(id, coupon, nodeID, adminID, tir, bets, createdBy)`
 devuelve `(*Ticket, error)` y realiza las validaciones propias del dominio.
 El constructor delega en el método privado `Ticket.validate() error`, que
 valida los datos del tiquete y llama a la función privada `validateBets` para las apuestas. Un
@@ -43,8 +43,15 @@ raíz. El contrato HTTP y su respuesta se definen en el PRD, sección 7.3.8.
 `ID` es el UUID v7 generado por el backend. `NodeID` representa al club y se
 copia del claim `node_id` del token; no se vuelve a resolver en consultas futuras.
 Así se conserva el club de la venta si el usuario cambia de nodo. No se
-introducen campos adicionales `CashierID`, `ClubID` o `AdminID` en esta
-estructura.
+introducen campos adicionales `CashierID` o `ClubID` en esta estructura.
+
+`AdminID` es el administrador del club: el `ParentId` de su nodo en el momento
+de la venta. El caso de uso lo resuelve con una lectura de la réplica local de
+nodos; consulta la sección
+[Lectura del vendedor y club](#lectura-del-vendedor-y-club). Es una copia
+histórica: no se vuelve a resolver, así que un cambio posterior del padre no
+modifica los tiquetes existentes. Agrupa las apuestas por administrador en el
+[registro de apuestas del sorteo](#registro-de-apuestas-del-sorteo).
 
 `CreatedBy` se copia del claim `unique_name` del token al crear el tiquete,
 conservando su escritura y mayúsculas; no se recibe como parámetro
@@ -73,7 +80,7 @@ username histórico de la venta, no el nombre actual consultado desde el usuario
 El endpoint, la paginación y el resto de la respuesta del listado siguen
 pendientes.
 
-`Create` exige UUID de tiquete y nodo distintos de cero, un TIR positivo,
+`Create` exige UUID de tiquete, nodo y administrador distintos de cero, un TIR positivo,
 `CreatedBy` no vacío ni compuesto solo por espacios y un cupón no vacío.
 El caso de uso genera el UUID v7 del tiquete con `uuid.NewV7()`; el constructor
 recibe valores `uuid.UUID` ya interpretados y solo comprueba que no sean nulos.
@@ -122,6 +129,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | Contador global | `COUNTER#TICKET` | `META` | `value`: Number, entero procesado como `uint64` |
 | Tiquete canónico | `TICKET#<ticketId>` | `META` | `ticketId`: UUID v7 como String con guiones; `coupon`: String; datos de negocio exigidos por el PRD |
 | Reserva y búsqueda por cupón | `COUPON#<coupon>` | `META` | `ticketId`: UUID del tiquete asociado |
+| Registro de apuestas del sorteo | `BETS#<tir>` | `<adminId>#<ticketId>` | `b`: Binary con las apuestas codificadas; `ttl` en segundos epoch. Consulta la sección [Registro de apuestas del sorteo](#registro-de-apuestas-del-sorteo) |
 | Evento pendiente de publicar | `OUTBOX#<eventId>` | `META` | `entityType = OUTBOX`; `eventType`, `source`, `detail` (JSON del evento), `occurredOnUtc` y `ttl` en segundos epoch. Lo escribe `platform/outbox` |
 
 ### Atributos del tiquete canónico
@@ -132,6 +140,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | `Coupon` | `coupon` | String numérico con padding mínimo de 4 dígitos |
 | `CreatedBy` | `createdBy` | String, copia del claim `unique_name` del token en el momento de creación |
 | `NodeID` | `nodeId` | String, UUID con guiones del club |
+| `AdminID` | `adminId` | String, UUID con guiones del administrador del club; ausente en los tiquetes vendidos antes de existir este campo |
 | `TIR` | `tir` | Number, entero positivo `uint64`, copiado del draw asociado |
 | `Bets` | `bets` | List de Map; cada mapa contiene `nums` (List de Number) y `valueCents` (Number) |
 | `Status` | `status` | String, valor del estado del dominio |
@@ -142,7 +151,7 @@ Los ítems usan la tabla configurada para Keno4min y sus claves `PK` y `SK`.
 | `PaidAt` | `paidAt` | String, UTC con el formato de `createdAt`; ausente mientras esté abierto |
 
 Los UUID se almacenan en su representación canónica con guiones. El adaptador
-usa `ticketItem`, `betItem` y `couponItem`, con etiquetas `dynamodbav`, y
+usa `ticketItem`, `betItem`, `couponItem` y `betsRecordItem`, con etiquetas `dynamodbav`, y
 `attributevalue.MarshalMap` del SDK oficial. `betItem.Nums` es `[]uint`, igual
 que en el dominio, de modo que `nums` se serializa como List de Number y no como
 el binario que produciría `[]uint8`. Los valores monetarios se conservan como enteros `int64` y el TIR
@@ -172,6 +181,47 @@ Un nuevo UUID no identifica reintentos de una venta; la idempotencia sigue pendi
 Los atributos adicionales para operaciones posteriores, el acceso para
 liquidación y los registros de idempotencia y coordinación con
 backoffice quedan pendientes.
+
+## Registro de apuestas del sorteo
+
+Cada tiquete vendido escribe además un ítem compacto con sus apuestas. El motor
+de sorteos lo lee al cerrar las ventas, con un `Query` por `PK = BETS#<tir>`,
+para elegir el resultado sin leer los tiquetes completos. La clave de
+ordenación empieza por el administrador, así que las apuestas de un mismo
+administrador quedan contiguas.
+
+| Atributo | Tipo | Valor |
+| --- | --- | --- |
+| `PK` | String | `BETS#<tir>`; TIR decimal sin padding |
+| `SK` | String | `<adminId>#<ticketId>`; ambos UUID con guiones |
+| `b` | Binary | 24 bytes por apuesta, en el orden de `bets` |
+| `ttl` | Number | Segundos epoch: `createdAt` del tiquete más 24 horas |
+
+Cada apuesta ocupa 24 bytes en *little-endian*:
+
+| Bytes | Tipo | Contenido |
+| --- | --- | --- |
+| 0 a 7 | `uint64` | Números 1 a 64; el número `n` es el bit `n-1` |
+| 8 a 15 | `uint64` | Números 65 a 80; el número `n` es el bit `n-65` |
+| 16 a 23 | `int64` | Valor de la apuesta en centavos |
+
+El ítem no lleva `entityType` ni atributos de índice: no participa en `GSI1` ni
+`GSI2` y el relay del outbox lo descarta. `AP-TICKET-02` lo escribe en la misma
+transacción que el tiquete y `AP-TICKET-08` lo elimina en la misma transacción
+que anula el tiquete, de modo que un tiquete anulado no cuenta en el sorteo.
+Pagar un tiquete no lo toca.
+
+El registro solo sirve para el sorteo. No se elimina de forma explícita al
+terminar: lo borra el TTL de la tabla, activo sobre el atributo `ttl` en el
+repositorio central de infraestructura. Las apuestas completas se conservan en
+el tiquete canónico, por lo que el registro se puede reconstruir.
+
+El formato es un contrato con el motor de sorteos; cambiarlo requiere coordinar
+ambos repositorios. La función `encodeBets` y el ítem `betsRecordItem` están en
+[`bets_record.go`](../../internal/tickets/adapters/dynamodb/bets_record.go).
+
+El `Delete` de la anulación exige el permiso `dynamodb:DeleteItem` en el rol de
+la API, definido en el repositorio central de infraestructura.
 
 ## Índices de consulta
 
@@ -244,6 +294,17 @@ lectura/decodificación o un draw ausente devuelve `ErrDrawUnavailable` (`503`).
 lectura o condición sobre el draw al guardar. Consulta el
 [ADR 0021](../adrs/0021-validar-ventana-del-sorteo-al-crear-tiquetes.md).
 
+Después de validar el draw y antes de generar el cupón, el caso de uso lee el
+nodo del club con `nodes/ports.Repository.FindById`
+([`AP-NODE-02`](node-access-patterns.md), lectura fuerte) para resolver
+`Ticket.AdminID`: el `ParentId` del nodo. Un club que no está en la réplica
+local devuelve `ErrNodeNotFound` y uno sin padre devuelve
+`ErrNodeWithoutAdmin`; en ambos casos la venta se rechaza con `403`
+(`node cannot sell tickets`), sin consumir cupón ni mover saldo. La API conecta
+el repositorio de nodos con `nodesfx.RepositoryModule`. La réplica de nodos
+solo se llena con el evento de creación del nodo: si el club cambia de padre en
+core, Keno4min conserva el anterior.
+
 ## Patrones de acceso
 
 `AP-TICKET-01` está implementado por `Repository.GenerateCoupon` y
@@ -256,13 +317,13 @@ previstas que todavía no están implementadas.
 | ID | Operación | Acceso | Condición o consistencia |
 | --- | --- | --- | --- |
 | `AP-TICKET-01` | Asignar el siguiente consecutivo | `UpdateItem` en `COUNTER#TICKET` / `META` | Contador existente y dentro del intervalo; devuelve el nuevo valor |
-| `AP-TICKET-02` | Guardar tiquete, reservar cupón y registrar sus eventos | `TransactWriteItems`, con un `Put` en el tiquete, otro en su reserva y uno `OUTBOX#<eventId>` por evento | `attribute_not_exists(PK)` en cada `Put` |
+| `AP-TICKET-02` | Guardar tiquete, reservar cupón, escribir su registro de apuestas y registrar sus eventos | `TransactWriteItems`, con un `Put` en el tiquete, otro en su reserva, otro en `BETS#<tir>` / `<adminId>#<ticketId>` y uno `OUTBOX#<eventId>` por evento | `attribute_not_exists(PK)` en cada `Put` |
 | `AP-TICKET-03` | Resolver un tiquete por cupón | `GetItem` en `COUPON#<coupon>` / `META`; luego `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte en ambas operaciones |
 | `AP-TICKET-04` | Listar tiquetes por TIR | `Query` en `GSI1`, `GSI1PK = TICKETS#TIR#<tir>` | Eventual; paginar hasta agotar resultados |
 | `AP-TICKET-05` | Listar tiquetes por nodo y rango de creación | `Query` en `GSI2`, `GSI2PK = TICKETS#NODE#<nodeId>` y rango sobre `GSI2SK` | Eventual; rango `[from, to)` y cursor completo |
 | `AP-TICKET-06` | Obtener un tiquete por ID | `GetItem` en `TICKET#<ticketId>` / `META` | Lectura fuerte |
 | `AP-TICKET-07` | Obtener varios tiquetes por ID | `BatchGetItem` en `TICKET#<ticketId>` / `META`, hasta 100 llaves | Lectura fuerte; error si quedan `UnprocessedKeys` |
-| `AP-TICKET-08` | Reescribir un tiquete existente y registrar sus eventos | `TransactWriteItems`, con un `Put` del ítem completo en `TICKET#<ticketId>` / `META` y uno `OUTBOX#<eventId>` por evento | `attribute_exists(PK)` en el tiquete; sin condición sobre el estado |
+| `AP-TICKET-08` | Reescribir un tiquete existente y registrar sus eventos | `TransactWriteItems`, con un `Put` del ítem completo en `TICKET#<ticketId>` / `META`, un `Delete` de su registro de apuestas si el tiquete queda anulado y uno `OUTBOX#<eventId>` por evento | `attribute_exists(PK)` en el tiquete; sin condición sobre el estado ni sobre el registro de apuestas |
 
 `AP-TICKET-03` es un acceso interno previsto, no un endpoint de consulta ya
 definido. Conocer el cupón no sustituye la autorización del cajero.
@@ -379,16 +440,18 @@ recibe el cliente compartido y `config.Config` mediante
 
 Después de consultar el TIR actual, asignar el consecutivo y construir el tiquete
 con las validaciones del dominio,
-`AP-TICKET-02` guarda el tiquete canónico y la reserva en una misma transacción.
-Ambos `Put` exigen que su clave no exista. Se guardan ambos registros o ninguno;
+`AP-TICKET-02` guarda el tiquete canónico, la reserva y el registro de apuestas
+en una misma transacción. Los tres `Put` exigen que su clave no exista. Se
+guardan los tres registros o ninguno;
 un cupón reservado nunca se reasigna ni se sobrescribe. La consulta previa de
 existencia o un GSI por cupón no sustituyen esta condición.
 
-`Save` recibe un tiquete ya preparado: serializa sus datos y el vínculo de
-reserva, toma los eventos del agregado con `outbox.TransactItems` y realiza una
-única llamada `TransactWriteItems` sobre la tabla configurada. Al crearse, el
-tiquete registra `cronos.keno4min.ticket.created`, así que la transacción lleva
-tres `Put`: tiquete, reserva y registro outbox. Si la transacción falla, los
+`Save` recibe un tiquete ya preparado: serializa sus datos, el vínculo de
+reserva y el registro de apuestas, toma los eventos del agregado con
+`outbox.TransactItems` y realiza una única llamada `TransactWriteItems` sobre
+la tabla configurada. Al crearse, el tiquete registra
+`cronos.keno4min.ticket.created`, así que la transacción lleva cuatro `Put`:
+tiquete, reserva, registro de apuestas y registro outbox. Si la transacción falla, los
 eventos ya salieron del agregado: no se reintenta con la misma instancia. No ejecuta lecturas previas ni actualiza el contador.
 Un argumento nulo devuelve un error antes de enviar solicitudes.
 
@@ -409,8 +472,9 @@ termina con éxito. El handler responde `500` ante errores de persistencia, sin 
 El repositorio está conectado a Fx y al handler HTTP mediante `ticketsfx.Module`.
 `GenerateCoupon` asigna el consecutivo y devuelve el cupón formateado;
 `Save` recibe ese cupón ya asignado. `tickets/usecase.Create` coordina ambos
-métodos: consulta el TIR actual, genera el cupón y el UUID v7, llama a `tickets.Create` con
-el club y el username del token, y guarda el resultado. El constructor valida
+métodos: consulta el TIR actual, resuelve el administrador del club, genera el
+cupón y el UUID v7, llama a `tickets.Create` con el club, su administrador y el
+username del token, y guarda el resultado. El constructor valida
 las apuestas mediante `validateBets`, además de sus comprobaciones restantes.
 Un rechazo posterior al incremento
 puede dejar un salto permitido. No se recupera ni decrementa el
@@ -437,7 +501,8 @@ el draw canónico; esa validación no es atómica con la transacción de guardad
    liquidado se rechaza con `409`.
 4. Reintegra el total en core con `Credit`, razón `TicketCancellation` y clave
    `ticket:<ticketId>:cancel-credit`.
-5. Guarda con `AP-TICKET-08`. Si falla, compensa con `Debit`, razón
+5. Guarda con `AP-TICKET-08`, que en la misma transacción elimina el registro
+   de apuestas del tiquete. Si falla, compensa con `Debit`, razón
    `TicketCancellationReversal` y clave `ticket:<ticketId>:cancel-credit-reversal`.
 
 El evento solo llega al outbox si el reintegro tuvo éxito, porque el guardado

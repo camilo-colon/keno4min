@@ -44,6 +44,7 @@ type Ticket struct {
 	ID         uuid.UUID
 	Coupon     string
 	NodeID     uuid.UUID
+	AdminID    uuid.UUID
 	TIR        uint64
 	Bets       []Bet
 	Status     Status
@@ -51,18 +52,16 @@ type Ticket struct {
 	Balls      []uint8
 	CreatedBy  string
 	CreatedAt  time.Time
-	// PaidBy and PaidAt record the cashier who closed the ticket and when, for both
-	// cancellation and payment. Only Status tells which one happened: a cancelled
-	// ticket also fills them. Both are empty while the ticket is open.
-	PaidBy string
-	PaidAt time.Time
+	PaidBy     string
+	PaidAt     time.Time
 }
 
-func Create(id uuid.UUID, coupon string, nodeID uuid.UUID, tir uint64, bets []Bet, createdBy string) (*Ticket, error) {
+func Create(id uuid.UUID, coupon string, nodeID uuid.UUID, adminID uuid.UUID, tir uint64, bets []Bet, createdBy string) (*Ticket, error) {
 	ticket := &Ticket{
 		ID:        id,
 		Coupon:    coupon,
 		NodeID:    nodeID,
+		AdminID:   adminID,
 		TIR:       tir,
 		Bets:      bets,
 		Status:    StatusPending,
@@ -172,6 +171,9 @@ func (t *Ticket) validate() error {
 	}
 	if t.NodeID == uuid.Nil() {
 		return errors.New("node id is required")
+	}
+	if t.AdminID == uuid.Nil() {
+		return errors.New("admin id is required")
 	}
 	if t.TIR == 0 {
 		return errors.New("tir must be greater than zero")

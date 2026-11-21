@@ -20,6 +20,7 @@ type ticketItem struct {
 	TicketID   string    `dynamodbav:"ticketId"`
 	Coupon     string    `dynamodbav:"coupon"`
 	NodeID     string    `dynamodbav:"nodeId"`
+	AdminID    string    `dynamodbav:"adminId,omitempty"`
 	TIR        uint64    `dynamodbav:"tir"`
 	Bets       []betItem `dynamodbav:"bets"`
 	Status     string    `dynamodbav:"status"`
@@ -44,6 +45,20 @@ func formatPaidAt(t time.Time) string {
 		return ""
 	}
 	return formatCreatedAt(t)
+}
+
+func formatAdminID(id uuid.UUID) string {
+	if id == uuid.Nil() {
+		return ""
+	}
+	return id.String()
+}
+
+func parseAdminID(value string) (uuid.UUID, error) {
+	if value == "" {
+		return uuid.Nil(), nil
+	}
+	return uuid.Parse(value)
 }
 
 type betItem struct {
@@ -81,6 +96,7 @@ func toItem(ticket *tickets.Ticket) ticketItem {
 		TicketID:   ticket.ID.String(),
 		Coupon:     ticket.Coupon,
 		NodeID:     ticket.NodeID.String(),
+		AdminID:    formatAdminID(ticket.AdminID),
 		TIR:        ticket.TIR,
 		Bets:       bets,
 		Status:     string(ticket.Status),
@@ -101,6 +117,10 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 	nodeID, err := uuid.Parse(item.NodeID)
 	if err != nil {
 		return nil, fmt.Errorf("decode node id of ticket %s: %w", id, err)
+	}
+	adminID, err := parseAdminID(item.AdminID)
+	if err != nil {
+		return nil, fmt.Errorf("decode admin id of ticket %s: %w", id, err)
 	}
 
 	bets := make([]tickets.Bet, len(item.Bets))
@@ -124,6 +144,7 @@ func fromItem(item ticketItem) (*tickets.Ticket, error) {
 		ID:         id,
 		Coupon:     item.Coupon,
 		NodeID:     nodeID,
+		AdminID:    adminID,
 		TIR:        item.TIR,
 		Bets:       bets,
 		Status:     tickets.Status(item.Status),
